@@ -12,6 +12,10 @@ class DecafClass:
 		# update the class with the declarations list and subsequently
 		# update each of the symbol tables produced for each declaration
 		# with the class name
+		# must also reset the class counters for methods, fields, and constructors
+		ConstructorRecord.constructorCounter = 1
+		FieldRecord.fieldCounter = 1
+		MethodRecord.methodCounter = 1
 		for record in declarations:
 			if isinstance(record, FieldRecord):
 				record.containingClass = name
@@ -29,17 +33,6 @@ class DecafClass:
 						# TODO error, conflicting variable names!
 						print "Error, conflicting variable names"
 					record.block.variableTable[param.name] = newVar
-				# # to properly build the variableTable associated with each
-				# # block, we will use a queue
-				# # the intention here is to build a variable table for each
-				# # block and update the id of each variable expression
-				# # in said block. It is possible that the variable is a
-				# # can be found in containing blocks.
-				# for stmt in record.block.stmts:
-					# if isinstance(stmt, VariableDeclaration):
-						# for name in stmt.names:
-							# newVar = Variable(name, stmt.type, "local")
-							# record.variableTable.append(newVar)
 			elif isinstance(record, MethodRecord):			
 				record.containingClass = name
 				self.methodTable.append(record)				
@@ -53,19 +46,6 @@ class DecafClass:
 						# TODO error, conflicting variable names!
 						print "Error, conflicting variable names"
 					record.block.variableTable[param.name] = newVar
-					
-				# Variable.variableCounter = 0
-				# for param in record.parameters:
-					# newVar = Variable(param.name, param.type, "formal")
-					# record.variableTable.append(newVar)
-				# for stmt in record.block.stmts:
-					# # TODO this actually gets a bit more involved, we need
-					# # to iteratively check each block within each block until
-					# # every block of statements is checked
-					# if isinstance(stmt, VariableDeclaration):
-						# for name in stmt.names:
-							# newVar = Variable(name, stmt.type, "local")
-							# record.variableTable.append(newVar)
 		
 	
 	def printClass(self):
@@ -249,7 +229,11 @@ class TypeRecord:
 	
 	def toString(self):
 		# if the type isn't built-in then the output reflects this
-		if(self.whichType == "INT" or self.whichType == "BOOLEAN" or self.whichType == "FLOAT"):
+		if(self.whichType == "INT" or
+		   self.whichType == "BOOLEAN" or 
+		   self.whichType == "FLOAT" or
+		   self.whichType == "VOID" or
+		   self.whichType == "STRING"):
 			return self.whichType
 		else:
 			return "user("+self.whichType+")"
@@ -389,8 +373,6 @@ def setContainingBlockExpr(expr, block):
 			
 class BlockStatement:
 
-	variableID = 1
-
 	def __init__(self, stmts, startLine, endLine):
 		self.stmts = stmts
 		self.startLine = startLine
@@ -401,20 +383,18 @@ class BlockStatement:
 		# of a given variable expression. This condition is ensured recursively.
 		# We can also setup the block variable table here
 		variableTable = {}
-		BlockStatement.variableID = 1
+		Variable.variableCounter = 1
 		for stmt in stmts:
 			setContainingBlockStmt(stmt, self)
 			if isinstance(stmt, VariableDeclarationStatement):
 				decl = stmt.varDecl
 				for name in decl.names:
 					newVar = Variable(name, decl.type, "local")
-					newVar.id = BlockStatement.variableID
 					if name in variableTable:
 						# TODO in this case we already have a variable with
 						# this name in the block! Compiler error.
 						print "Error - Variable name already defined"
 					variableTable[name] = newVar
-					BlockStatement.variableID+=1
 		self.variableTable = variableTable
 				
 				

@@ -29,8 +29,23 @@ def init():
 # keep track of decaf classes using a list
 classes = []
 
-# initialize class list with In and Out classes
-# TODO
+# the AST is going to be initialized with two classes already made:
+# In: Consider this as a class with no fields, no constructors, but with the following two methods:
+# 		scan_int: a public static method that takes no parameters, with a return type of int.
+# 		scan_float: a public static method that takes no parameters, with a return type of float.
+# Out: Consider this as a class with no fields, no constructors, but with the following four methods:
+# 		print: a public static method that takes one formal parameter (for convenience, call it i) of type int, and returns nothing.
+# 		print: a public static method that takes one formal parameter (for convenience, call it f) of type float, and returns nothing.
+# 		print: a public static method that takes one formal parameter (for convenience, call it b) of type boolean, and returns nothing.
+# 		print: a public static method that takes one formal parameter (for convenience, call it s) of type string, and returns nothing.
+methodList = [MethodRecord(ModStruct("public","static"), TypeRecord("INT"), "scan_int",  [], BlockStatement([], 0, 0)),
+			  MethodRecord(ModStruct("public","static"), TypeRecord("FLOAT"), "scan_float",  [], BlockStatement([], 0, 0))]
+classes.append(DecafClass("In", "", methodList))
+methodList = [MethodRecord(ModStruct("public","static"), TypeRecord("VOID"), "print",  [Parameter(TypeRecord("INT"), "i", 0, 0)], BlockStatement([], 0, 0)),
+			  MethodRecord(ModStruct("public","static"), TypeRecord("VOID"), "print",  [Parameter(TypeRecord("FLOAT"), "f", 0, 0)], BlockStatement([], 0, 0)),
+			  MethodRecord(ModStruct("public","static"), TypeRecord("VOID"), "print",  [Parameter(TypeRecord("BOOLEAN"), "b", 0, 0)], BlockStatement([], 0, 0)),
+			  MethodRecord(ModStruct("public","static"), TypeRecord("VOID"), "print",  [Parameter(TypeRecord("STRING"), "s", 0, 0)], BlockStatement([], 0, 0))]
+classes.append(DecafClass("Out", "", methodList))
 
 ### DECAF Grammar
 
@@ -135,7 +150,7 @@ def p_field_decl(p):
 
 def p_method_decl_void(p):
 	'method_decl : mod VOID ID LPAREN param_list_opt RPAREN block'
-	p[0] = MethodRecord(p[1], "void", p[3], p[5], p[7])
+	p[0] = MethodRecord(p[1], TypeRecord("VOID"), p[3], p[5], p[7])
 	pass
 def p_method_decl_nonvoid(p):
 	'method_decl : mod type ID LPAREN param_list_opt RPAREN block'
