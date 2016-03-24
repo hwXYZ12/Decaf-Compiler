@@ -9,7 +9,6 @@ class DecafClass:
 		self.methodTable = []
 		# here we actually interpret each declaration and build our
 		# symbol tables
-		print declarations
 		# update the class with the declarations list and subsequently
 		# update each of the symbol tables produced for each declaration
 		# with the class name
@@ -20,24 +19,53 @@ class DecafClass:
 			elif isinstance(record, ConstructorRecord):			
 				record.containingClass = name
 				self.constructorTable.append(record)
-				# here we can build the constructor record's variable table
-				# we reset the id counter since id's are unique only within
-				# the context of each individual variable table
-				Variable.variableCounter = 0
-				record.variableTable = []
+				# The body statement of the constructor has already generated
+				# a variable table for itself, we need only add the constructor
+				# parameters to that table
+				Variable.variableCounter = len(record.block.variableTable)+1
 				for param in record.parameters:
 					newVar = Variable(param.name, param.type, "formal")
-					record.variableTable.append(newVar)
-				for stmt in record.statements:
-					if isinstance(stmt, VariableDeclaration):
-						for name in stmt.names:
-							newVar = Variable(name, stmt.type, "local")
-							record.variableTable.append(newVar)
-							
-												
+					if param.name in record.block.variableTable:
+						# TODO error, conflicting variable names!
+						print "Error, conflicting variable names"
+					record.block.variableTable[param.name] = newVar
+				# # to properly build the variableTable associated with each
+				# # block, we will use a queue
+				# # the intention here is to build a variable table for each
+				# # block and update the id of each variable expression
+				# # in said block. It is possible that the variable is a
+				# # can be found in containing blocks.
+				# for stmt in record.block.stmts:
+					# if isinstance(stmt, VariableDeclaration):
+						# for name in stmt.names:
+							# newVar = Variable(name, stmt.type, "local")
+							# record.variableTable.append(newVar)
 			elif isinstance(record, MethodRecord):			
 				record.containingClass = name
-				self.methodTable.append(record)
+				self.methodTable.append(record)				
+				# The body statement of the method has already generated
+				# a variable table for itself, we need only add the constructor
+				# parameters to that table
+				Variable.variableCounter = len(record.block.variableTable)+1
+				for param in record.parameters:
+					newVar = Variable(param.name, param.type, "formal")
+					if param.name in record.block.variableTable:
+						# TODO error, conflicting variable names!
+						print "Error, conflicting variable names"
+					record.block.variableTable[param.name] = newVar
+					
+				# Variable.variableCounter = 0
+				# for param in record.parameters:
+					# newVar = Variable(param.name, param.type, "formal")
+					# record.variableTable.append(newVar)
+				# for stmt in record.block.stmts:
+					# # TODO this actually gets a bit more involved, we need
+					# # to iteratively check each block within each block until
+					# # every block of statements is checked
+					# if isinstance(stmt, VariableDeclaration):
+						# for name in stmt.names:
+							# newVar = Variable(name, stmt.type, "local")
+							# record.variableTable.append(newVar)
 		
 	
 	def printClass(self):
@@ -57,7 +85,7 @@ class DecafClass:
 
 class FieldRecord:
 
-	fieldCounter = 0
+	fieldCounter = 1
 
 	# we update the record with it's containing class
 	# during the parse
@@ -76,23 +104,19 @@ class FieldRecord:
 		s+= self.containingClass+", "
 		s+= self.visibility+", "
 		s+= self.applicability+", "
-		s+= self.type.whichType
+		s+= self.type.toString()
 		print s
 		
 class ConstructorRecord:
 
-	constructorCounter = 0
+	constructorCounter = 1
 	
 	def __init__(self, mod, name, parameters, block):
 		self.visibility = mod.visibility
 		self.applicability = mod.applicability
 		self.name = name
 		self.parameters = parameters
-		# TODO remove this line...
-		if not isinstance(block, list):
-			self.statements = []
-		else:
-			self.statements = block
+		self.block = block
 		self.id = ConstructorRecord.constructorCounter
 		ConstructorRecord.constructorCounter+=1
 		
@@ -102,25 +126,28 @@ class ConstructorRecord:
 		s+= self.visibility
 		print s
 		s = "Constructor parameters: "
-		for param in self.parameters:
-			s += param.toString()
+		temp = []
+		for key in self.block.variableTable.keys():
+			var = self.block.variableTable[key]
+			if (var.localOrFormal == "formal"):
+				temp.append(var.id)
+		if (len(temp)>0):
+			for i in range(0, len(temp)-1):
+				s += str(temp[i])+", "
+			s += str(temp[len(temp)-1])			
 		print s
 		print "Variable Table: "
-		for var in self.variableTable:
-			print var.toString()	# each variable declaration
-									# has its own line
+		for key in self.block.variableTable.keys():
+			print self.block.variableTable[key].toString()
+			# each variable declaration
+			# has its own line
 		print "Constructor Body:"
-		for stmt in self.statements:
-			if not isinstance(stmt, str):
-				print stmt.toString()
-			else:
-				print stmt
-		print s
+		print self.block.toString()
 	
 
 class MethodRecord:
 
-	methodCounter = 0
+	methodCounter = 1
 
 	def __init__(self, mod, returnType, name, parameters, block):
 		self.visibility = mod.visibility
@@ -128,33 +155,39 @@ class MethodRecord:
 		self.returnType = returnType
 		self.name = name
 		self.parameters = parameters
-		self.statements = block
+		self.block = block
 		self.id = MethodRecord.methodCounter
 		MethodRecord.methodCounter+=1
 		
 	def printMethod(self):
-		print "temp" # TODO
-		# s = "CONSTRUCTOR: "
-		# s+= str(self.id)+", "
-		# s+= self.visibility
-		# print s
-		# s = "Constructor parameters: "
-		# for param in self.parameters:
-			# s += param.toString()
-		# print s
-		# print "Variable Table: "
-		# for var in self.variableTable:
-			# print var.toString()	# each variable declaration
-									# # has its own line
-		# print "Constructor Body:"
-		# for stmt in self.statements:
-			# if not isinstance(stmt, str):
-				# print stmt.toString()
-			# else:
-				# print stmt
-		# print s
+		s = "METHOD: "
+		s+= str(self.id)+", "
+		s+= self.name+", "
+		s+= self.containingClass+", "
+		s+= self.visibility+", "
+		s+= self.applicability+", "		
+		s+= self.returnType.toString()
+		print s
+		s = "Method parameters: "
+		temp = []
+		for key in self.block.variableTable.keys():
+			var = self.block.variableTable[key]
+			if (var.localOrFormal == "formal"):
+				temp.append(var.id)
+		if (len(temp)>0):
+			for i in range(0, len(temp)-1):
+				s += str(temp[i])+", "
+			s += str(temp[len(temp)-1])			
+		print s
+		print "Variable Table: "		
+		for key in self.block.variableTable.keys():
+			print self.block.variableTable[key].toString()
+			# each variable declaration
+			# has its own line
+		print "Method Body:"
+		print self.block.toString()
 
-# useful struct to help pass applicability & visibility information
+# useful class to help pass applicability & visibility information
 # in the attribute grammar
 class ModStruct:
 
@@ -162,28 +195,45 @@ class ModStruct:
 		self.visibility = visibility
 		self.applicability = applicability
 		
-# structs to help pass variable declaration information
+# class to help pass variable declaration information
 class VariableDeclaration:
 
 	def __init__(self, type, names):
 		self.type = type
 		self.names = names
+	
+	def toString(self):
+		s = self.type.toString()+", "
+		for i in range(0, len(self.names)-1):
+			s += self.names[i]+", "
+		s += self.names[len(self.names)-1]
+		return s
+			
 
+# class to help pass parameter information
+class Parameter:
+
+	def __init__(self, type, name, startLine, endLine):
+		self.type = type
+		self.name = name
+		self.startLine = startLine		
+		self.endLine = endLine
+		
 # variable record
 class Variable:
 
-	variableCounter = 0
+	variableCounter = 1
 	
 	def __init__(self, name, type, localOrFormal):
 		self.type = type
 		self.name = name
 		self.localOrFormal = localOrFormal
-		self.id = variableCounter
-		variableCounter+=1
+		self.id = Variable.variableCounter
+		Variable.variableCounter+=1
 		
-	def toString():	
+	def toString(self):	
 		s = "VARIABLE: "
-		s += self.id+", "
+		s += str(self.id)+", "
 		s += self.name+", "
 		s += self.localOrFormal+", "
 		s += self.type.whichType
@@ -194,19 +244,16 @@ class Variable:
 # consistency the class is included anyway
 class TypeRecord:
 
-	__init__(self, type):
+	def __init__(self, type):
 		self.whichType = type
-		
-# struct intended to represent a single parameter	
-class Parameter:
-
-	def __init__(self, type, name):
-		self.type = type
-		self.name = name
-		
-	def toString():
-		return self.type.whichType+", "+self.name
-
+	
+	def toString(self):
+		# if the type isn't built-in then the output reflects this
+		if(self.whichType == "INT" or self.whichType == "BOOLEAN" or self.whichType == "FLOAT"):
+			return self.whichType
+		else:
+			return "user("+self.whichType+")"
+	
 # a class per statement type
 class IfElseStatement:
 	
@@ -217,6 +264,13 @@ class IfElseStatement:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "IfElse( "+self.cond.toString()
+		s += ", "+self.thenStmt.toString()
+		s += ", "+self.elseStmt.toString()
+		s += " )"
+		return s
+		
 class IfStatement:
 	
 	def __init__(self, expr, stmt, startLine, endLine):
@@ -225,6 +279,12 @@ class IfStatement:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "If( "+self.expr.toString()
+		s += ", "+self.stmt.toString()
+		s += " )"
+		return s
+		
 class WhileStatement:
 	
 	def __init__(self, expr, stmt, startLine, endLine):
@@ -232,6 +292,12 @@ class WhileStatement:
 		self.stmt = stmt
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "While( "+self.expr.toString()
+		s += ", "+self.stmt.toString()
+		s += " )"
+		return s
 		
 class ForStatement:
 
@@ -243,12 +309,25 @@ class ForStatement:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "For( "+self.init.toString()
+		s += ", "+self.loopCond.toString()
+		s += ", "+self.update.toString()
+		s += ", "+self.body.toString()
+		s += " )"
+		return s
+		
 class ReturnStatement:
 	
 	def __init__(self, ret, startLine, endLine):
 		self.ret = ret
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "Return( "+self.ret.toString()
+		s += " )"
+		return s
 
 class ExpressionStatement:
 
@@ -256,13 +335,102 @@ class ExpressionStatement:
 		self.expr = expr
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "Expr( "+self.expr.toString()
+		s += " )"
+		return s
+
+# recursive functions used to ensure that every statement & expression
+# has a reference to it's containing block
+def setContainingBlockStmt(stmt, block):
+	if not (stmt is None):
+		stmt.containingBlock = block
+		if isinstance(stmt, IfElseStatement):
+			setContainingBlockExpr(stmt.cond, block)
+			setContainingBlockStmt(stmt.thenStmt, block)
+			setContainingBlockStmt(stmt.elseStmt, block)
+		elif isinstance(stmt, IfStatement):
+			setContainingBlockExpr(stmt.expr, block)
+			setContainingBlockStmt(stmt.stmt, block)
+		elif isinstance(stmt, WhileStatement):
+			setContainingBlockExpr(stmt.expr, block)
+			setContainingBlockStmt(stmt.stmt, block)
+		elif isinstance(stmt, ForStatement):
+			setContainingBlockExpr(stmt.init, block)
+			setContainingBlockExpr(stmt.loopCond, block)
+			setContainingBlockExpr(stmt.update, block)
+			setContainingBlockStmt(stmt.body, block)
+		elif isinstance(stmt, ExpressionStatement):
+			setContainingBlockExpr(stmt.expr, block)
+		elif isinstance(stmt, ReturnStatement):
+			setContainingBlockExpr(stmt.ret, block)
 		
+def setContainingBlockExpr(expr, block):
+	if not (expr is None):
+		expr.containingBlock = block
+		if isinstance(expr, UnaryExpression):
+			setContainingBlockExpr(expr.operand, block)
+		elif isinstance(expr, BinaryExpression):
+			setContainingBlockExpr(expr.operand1, block)
+			setContainingBlockExpr(expr.operand2, block)		
+		elif isinstance(expr, AssignExpression):
+			setContainingBlockExpr(expr.leftHandSide, block)
+			setContainingBlockExpr(expr.rightHandSide, block)
+		elif isinstance(expr, AutoExpression):
+			setContainingBlockExpr(expr.operand, block)
+		elif isinstance(expr, FieldAccessExpression):
+			setContainingBlockExpr(expr.base, block)
+		elif isinstance(expr, MethodCallExpression):				
+			setContainingBlockExpr(expr.base, block)
+		elif isinstance(expr, NewObjectExpression):
+			for x in expr.args:
+				setContainingBlockExpr(x, block)
+			
 class BlockStatement:
+
+	variableID = 1
 
 	def __init__(self, stmts, startLine, endLine):
 		self.stmts = stmts
 		self.startLine = startLine
 		self.endLine = endLine
+		self.containingBlock = None
+		# if every statement and expression maintains a reference to it's
+		# containing block, then it's straightforward to determine the id
+		# of a given variable expression. This condition is ensured recursively.
+		# We can also setup the block variable table here
+		variableTable = {}
+		BlockStatement.variableID = 1
+		for stmt in stmts:
+			setContainingBlockStmt(stmt, self)
+			if isinstance(stmt, VariableDeclarationStatement):
+				decl = stmt.varDecl
+				for name in decl.names:
+					newVar = Variable(name, decl.type, "local")
+					newVar.id = BlockStatement.variableID
+					if name in variableTable:
+						# TODO in this case we already have a variable with
+						# this name in the block! Compiler error.
+						print "Error - Variable name already defined"
+					variableTable[name] = newVar
+					BlockStatement.variableID+=1
+		self.variableTable = variableTable
+				
+				
+	def toString(self):
+		s = "Block([ \n"
+		if (isinstance(self.stmts, list) and len(self.stmts)>0):
+			for i in range(0, len(self.stmts)-1):
+				# variable declaration statements are special in the
+				# sense that they are NOT printed, so we skip them here
+				if not isinstance(self.stmts[i], VariableDeclarationStatement):
+					s += " "+self.stmts[i].toString()+"\n ,"
+					
+			if not isinstance(self.stmts[len(self.stmts)-1], VariableDeclarationStatement):
+				s += " "+self.stmts[len(self.stmts)-1].toString()+" \n"
+		s += "])"
+		return s
 		
 class ContinueStatement:
 
@@ -270,6 +438,11 @@ class ContinueStatement:
 		self.represents = "continue"
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "Continue( "
+		s += " )"
+		return s
 		
 class BreakStatement:
 
@@ -278,12 +451,38 @@ class BreakStatement:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "Break( "
+		s += " )"
+		return s
+		
 class SkipStatement:
 
+
+	# TODO make sure this statement is useful...?
 	def __init__(self, startLine, endLine):
 		self.represents = "empty"
 		self.startLine = startLine
 		self.endLine = endLine
+				
+	def toString(self):
+		s = "Skip( "
+		s += " )"
+		return s
+		
+class VariableDeclarationStatement:
+	
+	# wraps a varDecl in a statement class
+	def __init__(self, varDecl, startLine, endLine):
+		self.varDecl = varDecl
+		self.startLine = startLine		
+		self.endLine = endLine
+		
+	def toString(self):
+		s = "VariableDeclaration( "
+		s += self.varDecl.toString()
+		s += " )"
+		return s 
 
 # a class per expression type
 class ConstantIntegerExpression:
@@ -293,12 +492,24 @@ class ConstantIntegerExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "ConstantInteger( "
+		s += str(self.info)
+		s += " )"
+		return s
+		
 class ConstantFloatExpression:
 
 	def __init__(self, info, startLine, endLine):
 		self.info = info
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "ConstantFloat( "
+		s += str(self.info)
+		s += " )"
+		return s
 		
 class ConstantStringExpression:
 
@@ -307,12 +518,24 @@ class ConstantStringExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "ConstantString( "
+		s += self.info
+		s += " )"
+		return s
+		
 class ConstantNullExpression:
 
 	def __init__(self, startLine, endLine):
 		self.info = "null"
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "ConstantNull( "
+		s += self.info
+		s += " )"
+		return s
 		
 class ConstantTrueExpression:
 
@@ -321,6 +544,12 @@ class ConstantTrueExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "ConstantTrue( "
+		s += self.info
+		s += " )"
+		return s
+		
 class ConstantFalseExpression:
 
 	def __init__(self, startLine, endLine):
@@ -328,12 +557,38 @@ class ConstantFalseExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "False"
+		return s
+		
 class VariableExpression:
 
-	def __init__(self, id, startLine, endLine):
-		self.id = id
+	def __init__(self, name, startLine, endLine):
+		self.name = name
 		self.startLine = startLine
 		self.endLine = endLine
+		self.id = None
+	
+	def toString(self):
+		s = "Variable( "
+		if self.id is None:
+			self.determineID()
+		s += str(self.id)
+		s += " )"
+		return s
+		
+	def determineID(self):
+		whichBlock = self.containingBlock
+		while not (self.name in whichBlock.variableTable):
+			if whichBlock.containingBlock is None:
+				# TODO error, symbol not found!
+				# This error checking should not be left for toString()
+				# to be called.....
+				self.id = -1
+				return				
+			whichBlock = whichBlock.containingBlock
+		self.id = (whichBlock.variableTable[self.name]).id
+		
 		
 class UnaryExpression:
 
@@ -342,6 +597,13 @@ class UnaryExpression:
 		self.operand = operand
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "UnaryExpr( "
+		s += self.operator + ", "
+		s += self.operand.toString()
+		s += " )"
+		return s
 		
 class BinaryExpression:
 
@@ -352,6 +614,14 @@ class BinaryExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		
+	def toString(self):
+		s = "BinaryExpr( "
+		s += self.operator + ", "
+		s += self.operand1.toString() + ", "
+		s += self.operand2.toString() + ", "
+		s += " )"
+		return s
+		
 class AssignExpression:
 
 	def __init__(self, leftHandSide, rightHandSide, startLine, endLine):
@@ -359,6 +629,13 @@ class AssignExpression:
 		self.rightHandSide = rightHandSide
 		self.startLine = startLine
 		self.endLine = endLine
+				
+	def toString(self):
+		s = "Assign( "
+		s += self.leftHandSide.toString() + ", "
+		s += self.rightHandSide.toString()
+		s += " )"
+		return s
 		
 class AutoExpression:
 
@@ -368,6 +645,14 @@ class AutoExpression:
 		self.postOrPre = postOrPre
 		self.startLine = startLine
 		self.endLine = endLine
+				
+	def toString(self):
+		s = "AutoExpr( "
+		s += self.operand.toString() + ", "
+		s += self.incOrDec + ", "
+		s += self.postOrPre
+		s += " )"
+		return s
 		
 class FieldAccessExpression:
 
@@ -376,6 +661,18 @@ class FieldAccessExpression:
 		self.name = name
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "FieldAccess( "
+		if not (self.base is None):
+			# TODO this may be an error....
+			if isinstance(self.base, str):
+				s += self.base+", "
+			else:
+				s += self.base.toString() + ", "
+		s += self.name
+		s += " )"
+		return s
 	
 class MethodCallExpression:
 
@@ -385,14 +682,53 @@ class MethodCallExpression:
 		self.args = args
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "MethodCall( "
+		
+		if not (self.base is None):
+			# TODO this may be an error....
+			if isinstance(self.base, str):
+				s += self.base+", "
+			else:
+				s += self.base.toString() + ", "
+		
+		s += self.name + ", "
+		s += "Arguments([ "
+		if( isinstance(self.args, list) and len(self.args)>0):
+			s += "\n"
+			for i in range(0, len(self.args)-1):
+				s += self.args[i].toString()+", \n"
+			s += self.args[len(self.args-1)].toString()+" \n"			
+		s += "])"		
+		s += " )"
+		return s
 	
 class NewObjectExpression:
 
-	def __init__(self, base, constructorArgs, startLine, endLine):
+	def __init__(self, base, args, startLine, endLine):
 		self.base = base
-		self.constructorArgs = constructorArgs
+		self.args = args
 		self.startLine = startLine
 		self.endLine = endLine
+		
+	def toString(self):
+		s = "NewObject( "		
+		if not (self.base is None):
+			# TODO this may be an error....
+			if isinstance(self.base, str):
+				s += self.base+", "
+			else:
+				s += self.base.toString() + ", "
+		s += "Arguments([ "
+		if( isinstance(self.args, list) and len(self.args)>0):
+			s += "\n"
+			for i in range(0, len(self.args)-1):
+				s += self.args[i].toString()+", \n"
+			s += self.args[len(self.args)-1].toString()+" \n"			
+		s += "])"		
+		s += " )"
+		return s
 		
 class ThisExpression:
 
@@ -400,6 +736,10 @@ class ThisExpression:
 		self.represents = "this"
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "This"
+		return s
 		
 class SuperExpression:
 
@@ -407,6 +747,10 @@ class SuperExpression:
 		self.represents = "super"
 		self.startLine = startLine
 		self.endLine = endLine
+			
+	def toString(self):
+		s = "Super"
+		return s
 		
 class ClassReferenceExpression:
 
@@ -414,6 +758,12 @@ class ClassReferenceExpression:
 		self.name = name
 		self.startLine = startLine
 		self.endLine = endLine
+					
+	def toString(self):
+		s = "ClassReference( "
+		s += self.name
+		s += " )"
+		return s
 		
 # CSE 304 doesn't consider array expressions
 #class ArrayAccessExpression:

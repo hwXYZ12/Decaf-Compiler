@@ -5,6 +5,7 @@ where <filename> is the name of the file containing the Decaf program.
 """
 import sys
 import getopt
+from decafparser import classes
 
 import decafparser
 
@@ -35,7 +36,11 @@ def main(argv=None):
             filename=fullfilename
         infile = filename + ".decaf"
         if decafparser.from_file(infile):
-            print "No syntax errors found."
+			print "No syntax errors found."
+			# after parsing using the attribute grammar, print each
+			# class from the generated list of decaf classes
+			for c in classes:
+				c.printClass()
         else:
             print "Failure: there were errors."
     except Usage, err:
