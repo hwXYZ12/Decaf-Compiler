@@ -64,8 +64,12 @@ t_ASSIGN = r'='
 t_INC = r'\+\+'
 t_DEC = r'--'
 t_COMMA = r','
-t_ignore_COMMENT = r'//.*$'
-t_ignore_COMMENT_MULTI = r'/\*(.|\n)*?\*/'
+
+def t_ignore_COMMENT(t):
+	r'//.*'
+
+def t_ignore_COMMENT_MULTI(t):
+	r'/\*(.|\n)*?\*/'
 
 def t_ID(t):
     r'[a-zA-Z_][a-zA-Z_0-9]*'
@@ -101,8 +105,6 @@ def t_error(t):
     errorflag = True
 
 t_ignore  = ' \t'
-
-#lexer = lex.lex()
 
 def g_token(lexer):
     while True :

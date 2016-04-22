@@ -110,9 +110,13 @@ def p_class_body_decl_list_plus(p):
 	pass
 def p_class_body_decl_list_single(p):
 	'class_body_decl_list : class_body_decl'
-	p[0] = p[1]
+	decl = p[1]
+	if(isinstance(decl, list)):
+		p[0] = decl
+	else:
+		p[0] = [decl]
 	pass
-
+	
 def p_class_body_decl_field(p):
 	'class_body_decl : field_decl'
 	# a list of field records are created and passed upwards
@@ -199,11 +203,7 @@ def p_var_decl(p):
 	# var_decl passes up both the type of the declaration
 	# and a list containing the variable IDs
 	# if structure ensures that it is indeed a list passed upwards
-	variableSet = p[2]
-	if not isinstance(variableSet, list):
-		p[0] = VariableDeclaration(p[1], [variableSet])
-	else:
-		p[0] = VariableDeclaration(p[1], variableSet)
+	p[0] = VariableDeclaration(p[1], p[2])
 	pass
 
 # we aren't going to use an enum for types though since
@@ -231,14 +231,12 @@ def p_var_list_plus(p):
 	# of variable names (we know that var will always be a single name)
 	x = p[1]
 	y = p[3]
-	if isinstance(x, list):
-		p[0] = x.append(y)
-	else:
-		p[0] = [x, y]
+	x.append(y)
+	p[0] = x
 	pass
 def p_var_list_single(p):
 	'var_list : var'
-	p[0] = p[1]
+	p[0] = [p[1]]
 
 def p_var_id(p):
 	'var : ID'
@@ -299,7 +297,6 @@ def p_stmt_list_empty(p):
 	pass
 def p_stmt_list(p):
 	'stmt_list : stmt_list stmt'
-	#TODO make sure this runs properly when the whole program is completed
 	stmts = p[1]
 	if(len(stmts) == 1 and isinstance(stmts[0], SkipStatement)):
 		# replace the skip statement
@@ -436,14 +433,11 @@ def p_args_opt_empty(p):
 def p_args_plus(p):
 	'arg_plus : arg_plus COMMA expr'
 	args = p[1]
-	if isinstance(args, list):
-		p[0] = args.append(p[3])
-	else:
-		p[0] = [p[1], p[3]]
+	p[0] = args.append(p[3][0])
 	pass
 def p_args_single(p):
 	'arg_plus : expr'
-	p[0] = p[1]
+	p[0] = [p[1]]
 	pass
 
 # CSE 304 doesn't consider arrays, edited to reflect this
@@ -476,7 +470,7 @@ def p_field_access_id(p):
 def p_method_invocation(p):
 	'method_invocation : field_access LPAREN args_opt RPAREN'
 	fieldAccess = p[1]
-	p[0] = MethodCallExpression(fieldAccess.base, fieldAccess.name, p[4], p.lineno(1), p.lineno(4))
+	p[0] = MethodCallExpression(fieldAccess.base, fieldAccess.name, p[3], p.lineno(1), p.lineno(4))
 	pass
 
 # CSE 304 doesn't consider arrays, edited to reflect this
@@ -502,7 +496,7 @@ def p_expr_binop(p):
 	expr1 = p[1]
 	expr2 = p[3]
 	symbol = p[2]
-	p[0] = BinaryExpression(symbol, expr1, expr2, expr1.startLine, expr2.endLine)	
+	p[0] = BinaryExpression(symbol, expr1, expr2, p.lineno(1), p.lineno(3))	
 	pass
 def p_expr_unop(p):
 	'''expr : PLUS expr %prec UMINUS
@@ -516,7 +510,7 @@ def p_assign_equals(p):
 	'assign : lhs ASSIGN expr'
 	lhs = p[1]
 	rhs = p[3]
-	p[0] = AssignExpression(lhs, rhs, lhs.startLine, rhs.endLine)
+	p[0] = AssignExpression(lhs, rhs, p.lineno(1), p.lineno(3))
 	pass
 def p_assign_post_inc(p):
 	'assign : lhs INC'
@@ -588,7 +582,7 @@ def p_error(p):
     if p is None:
         print ("Unexpected end-of-file")
     else:
-        print ("Unexpected token '{0}' near line {1}".format(p.value, p.lineno(1)))
+        print ("Unexpected token '{0}' near line {1}".format(p.value, p.lineno))
     decaflexer.errorflag = True
 
 parser = yacc.yacc()

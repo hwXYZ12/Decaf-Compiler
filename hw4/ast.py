@@ -88,11 +88,21 @@ class DecafClass:
 		# statement and expression in the AST
 		# The class is type correct iff each constructor and method are
 		# type correct
-		for c in self.constructorTable:
-			c.typeCheck()
+		for c in self.constructorTable:		
+			# a second pass to ensure that all constructor variable expressions are
+			# resolved including classes and class literals
+			for stmt in c.block.stmts:			
+				determineVariableExprIDStmt(stmt, c.block)	
+			if not (c.typeCheck(self)):
+				print "ERROR - A type error in a constructor has occurred."
 			
 		for m in self.methodTable:
-			
+			# a second pass to ensure that all method variable expressions are
+			# resolved including classes and class literals
+			for stmt in m.block.stmts:			
+				determineVariableExprIDStmt(stmt, m.block)			
+			if not (m.typeCheck(self)):
+				print "ERROR - A type error in a method has occurred."
 		
 
 class FieldRecord:
@@ -156,10 +166,11 @@ class ConstructorRecord:
 		print "Constructor Body:"
 		print self.block.toString()
 		
-	def typeCheck(self):
+	def typeCheck(self, containingClass):
 		ret = True
-		for stmt in self.block:
-			if not stmt.typeCheck(self):
+		for stmt in self.block.stmts:
+			if not stmt.typeCheck(containingClass, self):
+				print "ERROR - A statement isn't type correct. Lines "+str(stmt.startLine)+" to "+str(stmt.endLine)+"."
 				ret = False
 		return ret
 
@@ -197,20 +208,23 @@ class MethodRecord:
 				s += str(temp[i])+", "
 			s += str(temp[len(temp)-1])			
 		print s
-		print "Variable Table: "		
-		for key in self.block.variableTable.keys():
-			print self.block.variableTable[key].toString()
-			# each variable declaration
-			# has its own line
+		print "Variable Table: "	
+		temp = self.block.variableTable.keys()
+		# force the variables to be printed in order
+		# and on separate lines
+		for index in range(0, len(temp)):			
+			for key in temp:
+				if(self.block.variableTable[key].id == (index+1)):				
+					print self.block.variableTable[key].toString()
 		print "Method Body:"
 		print self.block.toString()
-		
-	def typeCheck(self):
+			
+	def typeCheck(self, containingClass):
 		ret = True
-		for stmt in self.block:
-			if not stmt.typeCheck(self):
+		for stmt in self.block.stmts:
+			if not stmt.typeCheck(containingClass, self):
+				print "ERROR - A statement isn't type correct. Lines "+str(stmt.startLine)+" to "+str(stmt.endLine)+"."
 				ret = False
-				
 		return ret
 
 # useful class to help pass applicability & visibility information
@@ -273,40 +287,61 @@ class TypeRecord:
 	def __init__(self, type):
 		self.whichType = type
 		
-	# TODO still working out how class literal will be handled....
+	# whether or not the type record represents a class-literal depends
+	# on the context which is not information contained directly within
+	# a type record
 	
 	def toString(self):
 		# if the type isn't built-in then the output reflects this
-		if(self.whichType == "INT" or
-		   self.whichType == "BOOLEAN" or 
-		   self.whichType == "FLOAT" or
-		   self.whichType == "VOID" or
-		   self.whichType == "STRING"):
+		if(self.isBuiltIn()):
 			return self.whichType
 		else:
 			return "user("+self.whichType+")"
 			
-	def isSubType(self, expr):
+	def isSubType(self, typeRecord):
+	
+		# CSE 304 ignores arrays altogether
+	
+		# any type is a subtype of itself
+		if(self.whichType == typeRecord.whichType):
+			return True
+		
+		# int is a subtype of float
+		if(self.whichType == "INT"
+			and typeRecord.whichType == "FLOAT"):
+			return True			
+			
+		# null is a subtype of any class
+		if(self.whichType == "NULL"
+			and not typeRecord.isBuiltIn()):
+			return True			
+			
 		# if either type is a built-in type then
 		# this method is reduced
-		if(self.whichType == "INT" or
-		   self.whichType == "BOOLEAN" or 
-		   self.whichType == "FLOAT" or
-		   self.whichType == "VOID" or
-		   self.whichType == "STRING"):
-			return self.whichType == expr.type.whichType
-		else:
+		if self.isBuiltIn():
+			return self.whichType == typeRecord.whichType
+		else:			
 			# in the case that we're not dealing with
 			# built-in types we need to search up the
 			# subclass structure of the 'self' class
-			# until the type of 'expr' is found
+			# until the type of 'typeRecord' is found
 			x = self.whichType
-			while(x != expr.type.whichType)
-				x = classes[x].superName
+			while(x != typeRecord.whichType):
+				if not (x in DecafClass.classes):
+					return False
+				x = DecafClass.classes[x].superName
 				if(x is None):
 					return False
 			return True
-			
+	
+	def isBuiltIn(self):
+		return (self.whichType == "INT" or
+		   self.whichType == "BOOLEAN" or 
+		   self.whichType == "FLOAT" or
+		   self.whichType == "VOID" or
+		   self.whichType == "STRING" or
+		   self.whichType == "NULL" or
+		   self.whichType == "ERROR")
 	
 # a class per statement type
 class IfElseStatement:
@@ -325,10 +360,10 @@ class IfElseStatement:
 		s += " )"
 		return s
 		
-	def typeCheck(self, declaration):					
-		return (cond.type.whichType == "BOOLEAN"
-							and thenStmt.determineCorrectness(declaration)
-							and elseStmt.determineCorrectness(declaration))
+	def typeCheck(self, containingClass, declaration):				
+		return (self.cond.getType(containingClass).whichType == "BOOLEAN"
+							and self.thenStmt.typeCheck(containingClass, declaration)
+							and self.elseStmt.typeCheck(containingClass, declaration))
 		
 class IfStatement:
 	
@@ -344,14 +379,9 @@ class IfStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
-		if (self.typeChecked):
-			return self.isTypeCorrect
-		else:
-			self.typeChecked = True
-			self.isTypeCorrect = (expr.type == "BOOLEAN"
-								and stmt.determineCorrectness(declaration))					
-			return self.isTypeCorrect
+	def typeCheck(self, containingClass, declaration):					
+		return (self.expr.getType(containingClass).whichType == "BOOLEAN"
+							and self.stmt.typeCheck(containingClass, declaration))
 		
 class WhileStatement:
 	
@@ -367,14 +397,9 @@ class WhileStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
-		if (self.typeChecked):
-			return self.isTypeCorrect
-		else:
-			self.typeChecked = True
-			self.isTypeCorrect = (expr.type == "BOOLEAN"
-								and stmt.determineCorrectness(declaration))					
-			return self.isTypeCorrect		
+	def typeCheck(self, containingClass, declaration):					
+		return (self.expr.getType(containingClass).whichType == "BOOLEAN"
+							and stmt.typeCheck(containingClass, declaration))		
 		
 class ForStatement:
 
@@ -394,15 +419,11 @@ class ForStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
-		if (self.typeChecked):
-			return self.isTypeCorrect
-		else:
-			self.typeChecked = True
-			self.isTypeCorrect = (loopCond.type == "BOOLEAN"
-								and thenStmt.determineCorrectness(declaration)
-								and elseStmt.determineCorrectness(declaration))					
-			return self.isTypeCorrect
+	def typeCheck(self, containingClass, declaration):					
+		return (self.loopCond.getType(containingClass).whichType == "BOOLEAN"
+				and self.init.getType(containingClass).whichType != "ERROR"
+				and self.update.getType(containingClass).whichType != "ERROR"
+				and self.body.typeCheck(containingClass, declaration))
 		
 class ReturnStatement:
 	
@@ -412,14 +433,24 @@ class ReturnStatement:
 		self.endLine = endLine
 		
 	def toString(self):
-		s = "Return( "+self.ret.toString()
-		s += " )"
+		if not (self.ret is None):
+			s = "Return( "+self.ret.toString()
+			s += " )"
+		else:
+			s = "Return( )"
 		return s
 		
-	# this is a tricky thing
-	# TODO fix this later
-	def determineCorrectness(self, declaration):
-		return True
+	def typeCheck(self, containingClass, declaration):
+		if (self.ret is None):
+			check = declaration.returnType.whichType == "VOID"
+			if not check:
+				print "ERROR - Return type mismatch. Line "+str(self.startLine)+"."
+			return check
+		else:
+			check = self.ret.getType(containingClass).isSubType(declaration.returnType)
+			if not check:
+				print "ERROR - Return type mismatch. Line "+str(self.startLine)+"."
+			return check
 
 class ExpressionStatement:
 
@@ -432,6 +463,10 @@ class ExpressionStatement:
 		s = "Expr( "+self.expr.toString()
 		s += " )"
 		return s		
+		
+	def typeCheck(self, containingClass, declaration):
+		return self.expr.getType(containingClass).whichType != "ERROR"
+
 
 # recursive functions used to ensure that every statement & expression
 # has a reference to it's containing block
@@ -475,6 +510,8 @@ def setContainingBlockExpr(expr, block):
 			setContainingBlockExpr(expr.base, block)
 		elif isinstance(expr, MethodCallExpression):				
 			setContainingBlockExpr(expr.base, block)
+			for x in expr.args:
+				setContainingBlockExpr(x, block)
 		elif isinstance(expr, NewObjectExpression):
 			for x in expr.args:
 				setContainingBlockExpr(x, block)
@@ -528,11 +565,12 @@ def determineVariableExprIDExpr(expr, block):
 			expr.determineID()
 		elif isinstance(expr, MethodCallExpression):				
 			determineVariableExprIDExpr(expr.base, block)
+			for x in expr.args:
+				determineVariableExprIDExpr(x, block)
 		elif isinstance(expr, NewObjectExpression):
 			for x in expr.args:
 				determineVariableExprIDExpr(x, block)				
-				
-			
+							
 class BlockStatement:
 
 	def __init__(self, stmts, startLine, endLine):
@@ -579,19 +617,12 @@ class BlockStatement:
 		s += "])"
 		return s
 		
-	def determineCorrectness(self, declaration):
-		if (self.typeChecked):
-			return self.isTypeCorrect
-		else:
-			self.typeChecked = True
-			# we assume it is type correct until we find a statement
-			# that is NOT type correct
-			self.isTypeCorrect = True
-			for s in self.stmts:
-				if(not s.determineCorrectness(declaration)):
-					self.isTypeCorrect = False
-					
-			return self.isTypeCorrect
+	def typeCheck(self, containingClass, declaration):
+		ret = True
+		for s in self.stmts:
+			if not (s.typeCheck(containingClass, declaration)):
+				ret = False
+		return ret
 		
 class ContinueStatement:
 
@@ -605,7 +636,7 @@ class ContinueStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
+	def typeCheck(self, containingClass, declaration):
 		return True
 		
 class BreakStatement:
@@ -620,7 +651,7 @@ class BreakStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
+	def typeCheck(self, containingClass, declaration):
 		return True
 		
 class SkipStatement:
@@ -635,7 +666,7 @@ class SkipStatement:
 		s += " )"
 		return s
 		
-	def determineCorrectness(self, declaration):
+	def typeCheck(self, containingClass, declaration):
 		return True
 		
 class VariableDeclarationStatement:
@@ -652,9 +683,14 @@ class VariableDeclarationStatement:
 		s += " )"
 		return s 
 		
-	def determineCorrectness(self, declaration):
+	def typeCheck(self, containingClass, declaration):
+		# these statements are more or less always type correct by default
+		# their correctness is determined during AST construction (that is,
+		# the only error that can arise from declaring variables is either
+		# a malformed statement that will be found during lexical analysis
+		# or an over-writing of a variable already declared in the same scope
+		# that will be found during AST construction)
 		return True
-		# TODO not sure how this one works....
 
 # a class per expression type
 class ConstantIntegerExpression:
@@ -671,7 +707,7 @@ class ConstantIntegerExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class ConstantFloatExpression:
@@ -688,7 +724,7 @@ class ConstantFloatExpression:
 		s += " )"
 		return s
 	
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class ConstantStringExpression:
@@ -705,7 +741,7 @@ class ConstantStringExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class ConstantNullExpression:
@@ -722,7 +758,7 @@ class ConstantNullExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class ConstantTrueExpression:
@@ -739,7 +775,7 @@ class ConstantTrueExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class ConstantFalseExpression:
@@ -754,7 +790,7 @@ class ConstantFalseExpression:
 		s = "False"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class VariableExpression:
@@ -764,20 +800,38 @@ class VariableExpression:
 		self.startLine = startLine
 		self.endLine = endLine
 		self.id = None
+		self.isClassLiteral = False
 	
 	def toString(self):
-		s = "Variable( "
 		if self.id is None:
-			self.determineID()
-		s += str(self.id)
-		s += " )"
+			self.determineID()			
+		s = ""
+		if (self.isClassLiteral):
+			s = "ClassLiteral( "
+			s += self.name
+		else:
+			s = "Variable( "
+			s += str(self.id)
+		s += " )"			
 		return s
 		
 	def determineID(self):
+		
+		# it is possible that this expression cannot be resolved
+		# because it in fact represents a class literal
+		# this function will be called a second time once all classes
+		# have been synthesized and here that will be corrected
+		if(self.id == -1):
+			if self.name in DecafClass.classes:
+				self.isClassLiteral = True
+				self.type = TypeRecord(self.name)
+			else:				
+				print "ERROR - Symbol "+self.name+" not found. Line "+str(self.startLine)+"."
+			return
+		
 		whichBlock = self.containingBlock
 		while not (self.name in whichBlock.variableTable):
 			if whichBlock.containingBlock is None:
-				print "ERROR - Symbol "+self.name+" not found. Line "+str(self.startLine)+"."
 				self.id = -1
 				return				
 			whichBlock = whichBlock.containingBlock
@@ -787,7 +841,7 @@ class VariableExpression:
 		# references
 		self.type = whichBlock.variableTable[self.name].type
 		
-	def getType(self):
+	def getType(self, containingClass):
 		return self.type
 		
 class UnaryExpression:
@@ -806,24 +860,25 @@ class UnaryExpression:
 		s += " )"
 		return s
 		
-	def getType(self):		
+	def getType(self, containingClass):		
 		# type is defined by the used operator
 		# if the operand doesn't match the operator then
 		# the expression isn't type correct and the type is "ERROR"
 		if (self.type is None):
 			if(operator == "!"):
-				if(operand.getType() == "BOOLEAN"):
+				if(operand.getType(containingClass) == "BOOLEAN"):
 					self.type = TypeRecord("BOOLEAN")
 				else:
 					# operand-operator type mismatch
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
 					self.type = TypeRecord("ERROR")
 			elif(operator == "-" or operator == "+"):
-				if(operand.getType() == "INT"):
+				if(operand.getType(containingClass) == "INT"):
 					self.type = TypeRecord("INT")
-				elif(operand.getType() == "FLOAT"):
+				elif(operand.getType(containingClass) == "FLOAT"):
 					self.type = TypeRecord("FLOAT")
 				else:
-					# operand-operator type mismatch
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
 					self.type = TypeRecord("ERROR")
 					
 		return self.type
@@ -846,7 +901,7 @@ class BinaryExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		# Type checking must be performed post AST construction. In particular,
 		# we cannot know the subclass structure until we have processed all of
 		# the classes!
@@ -854,43 +909,47 @@ class BinaryExpression:
 			# type is defined by the used operator
 			# if the operand doesn't match the operator then
 			# the expression isn't type correct and the type is "ERROR"
-			if (operator == "+" or
-				operator == "-" or
-				operator == "*" or
-				operator == "/"):
-				if(operand1.getType() == "INT" and
-				   operand2.getType() == "INT"):
+			if (self.operator == "+" or
+				self.operator == "-" or
+				self.operator == "*" or
+				self.operator == "/"):
+				if(self.operand1.getType(containingClass).whichType == "INT" and
+				   self.operand2.getType(containingClass).whichType == "INT"):
 					self.type = TypeRecord("INT")
-				elif(operand1.getType() == "FLOAT" and
-					 operand2.getType() == "FLOAT"):
+				elif(self.operand1.getType(containingClass).whichType == "FLOAT" and
+					 self.operand2.getType(containingClass).whichType == "FLOAT"):
 					self.type = TypeRecord("FLOAT")
 				else:
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
 					self.type = TypeRecord("ERROR")
-			elif(operator == "&&" or
-				 operator == "||"):
-				if(operand1.getType() == "BOOLEAN" and
-				   operand2.getType() == "BOOLEAN"):
+			elif(self.operator == "&&" or
+				 self.operator == "||"):
+				if(self.operand1.getType(containingClass).whichType == "BOOLEAN" and
+				   self.operand2.getType(containingClass).whichType == "BOOLEAN"):
 					self.type = TypeRecord("BOOLEAN")
 				else:
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
 					self.type = TypeRecord("ERROR")
-			elif(operator == "<" or
-				 operator == "<=" or
-				 operator == ">" or
-				 operator == ">="):
-				if(operand1.getType() == "INT" and
-				   operand2.getType() == "INT"):
+			elif(self.operator == "<" or
+				 self.operator == "<=" or
+				 self.operator == ">" or
+				 self.operator == ">="):
+				if(self.operand1.getType(containingClass).whichType == "INT" and
+				   self.operand2.getType(containingClass).whichType == "INT"):
 					self.type = TypeRecord("BOOLEAN")
-				elif(operand1.getType() == "FLOAT" and
-					 operand2.getType() == "FLOAT"):
-					self.type = TypeRecord("BOOLEAN"))
-				else:
-					self.type = TypeRecord("ERROR")
-			elif(operator == "==" or
-				 operator == "!="):
-				if(operand1.getType().isSubType(operand2) or
-				   operand2.getType().isSubType(operand1)):
+				elif(self.operand1.getType(containingClass).whichType == "FLOAT" and
+					 self.operand2.getType(containingClass).whichType == "FLOAT"):
 					self.type = TypeRecord("BOOLEAN")
 				else:
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
+					self.type = TypeRecord("ERROR")
+			elif(self.operator == "==" or
+				 self.operator == "!="):
+				if(self.operand1.getType(containingClass).isSubType(self.operand2.getType(containingClass)) or
+				   self.operand2.getType(containingClass).isSubType(self.operand1.getType(containingClass))):
+					self.type = TypeRecord("BOOLEAN")
+				else:
+					print "ERROR - Operand-operator mismatch. Line "+str(self.startLine)+"."
 					self.type = TypeRecord("ERROR")
 					
 		return self.type
@@ -908,18 +967,21 @@ class AssignExpression:
 		s = "Assign( "
 		s += self.leftHandSide.toString() + ", "
 		s += self.rightHandSide.toString()
+		s += ", " + self.leftHandSide.type.whichType
+		s += ", " + self.rightHandSide.type.whichType
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		if (self.type is None):
-			rhs = self.rightHandSide.getType()
-			lhs = self.leftHandSide.getType() 
-			if (rhs.isSubType(self.leftHandSide)
+			rhs = self.rightHandSide.getType(containingClass)			
+			lhs = self.leftHandSide.getType(containingClass) 
+			if (rhs.isSubType(lhs)
 				and rhs.whichType != "ERROR"
 				and lhs.whichType != "ERROR"):
 				self.type = rhs
 			else:
+				print "ERROR - Assignment Error. Line "+str(self.startLine)+"."
 				self.type = TypeRecord("ERROR")
 		return self.type
 		
@@ -931,6 +993,7 @@ class AutoExpression:
 		self.postOrPre = postOrPre
 		self.startLine = startLine
 		self.endLine = endLine
+		self.type = None
 				
 	def toString(self):
 		s = "AutoExpr( "
@@ -940,13 +1003,14 @@ class AutoExpression:
 		s += " )"
 		return s
 		
-	def getType(self):
+	def getType(self, containingClass):
 		if(self.type is None):
-			if(operand.getType().whichType == "INT"):
+			if(self.operand.getType(containingClass).whichType == "INT"):
 				self.type = TypeRecord("INT")
-			elif(operand.getType().whichType == "FLOAT"):
+			elif(self.operand.getType(containingClass).whichType == "FLOAT"):
 				self.type = TypeRecord("FLOAT")
 			else:
+				print "ERROR - Operand-operator mismatch, auto expression must be either int or float. Line "+str(self.startLine)+"."
 				self.type = TypeRecord("ERROR")
 		return self.type
 		
@@ -957,6 +1021,7 @@ class FieldAccessExpression:
 		self.name = name
 		self.startLine = startLine
 		self.endLine = endLine
+		self.type = None
 			
 	def toString(self):
 		s = "FieldAccess( "
@@ -966,8 +1031,134 @@ class FieldAccessExpression:
 			else:
 				s += self.base.toString() + ", "
 		s += self.name
+		s += ", "
+		s += str(self.id)
 		s += " )"
 		return s
+	
+	# Useful method to help shorten name resolution code
+	# Searches all of the superclasses of the base class until a public
+	# field that matches the name parameter as well as the 
+	# applicability parameter is found and returned
+	# Upon failure, 'None' is returned
+	def searchSuperClassesForField(self, baseClassType, applicability, name):	
+		if(baseClassType in DecafClass.classes):
+			search = DecafClass.classes[baseClassType]
+		else:
+			return None
+		
+		if(search.superName is None):
+			return None
+		
+		if not (search.superName in DecafClass.classes):
+			return None
+		
+		x = DecafClass.classes[search.superName]	
+		loop = True
+		resolve = None
+		while(loop):
+			# search the field table for the name
+			for i in range(0, len(x.fieldTable)):
+				if(x.fieldTable[i].visibility == "public"
+					and x.fieldTable[i].name == name
+					and x.fieldTable[i].applicability == applicability):
+					resolve = x.fieldTable[i]
+					loop = False
+					break
+		
+			# if the field table doesn't contain the name
+			# then we search the super class																
+			# but if there is no super class, then we break the
+			# loop
+			if ( not (x.superName is None) 
+				and (x.superName in DecafClass.classes)):
+				x = DecafClass.classes[x.superName]
+			else:
+				loop = False
+				
+		# upon exiting the while loop, we either have successfully
+		# resolved the name or not
+		return resolve
+	
+	# This method will return a field record by searching the AST using the
+	# base and name values of this expression.
+	# The approach is to begin at the base class and using its definition
+	# check whether or not a visible field matches the name value of this 
+	# expression.
+	# If a visible field is not found, then each superclass of the given
+	# base class is checked sequentially in the same way.
+	# If no field is found after searching all superclasses then name
+	# resolution has failed and 'None' is returned signalling failure.
+	def nameResolution(self, containingClass):
+		
+		# if the base class is a built-in type then an error is present	
+		if( not isinstance(self.base, ThisExpression) and self.base.type.isBuiltIn()):
+			return None
+		
+		# the algorithm is slightly different if we're dealing directly with
+		# a 'ThisExpression'
+		if isinstance(self.base, ThisExpression):
+			# resolving an attribute name
+			x = containingClass
+			for i in range(0, len(x.fieldTable)):
+				if(x.fieldTable[i].name == self.name							
+					and x.fieldTable[i].applicability == "instance"):
+					return x.fieldTable[i]
+			# if the field isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# field
+			return self.searchSuperClassesForField(x.name, "instance", self.name)
+		elif( isinstance(self.base, VariableExpression) and self.base.isClassLiteral):
+			# the algorithm also changes a bit when you're dealing with
+			# a class literal
+			cType = self.base.type.whichType
+			x = DecafClass.classes[cType]			
+			# resolving a static attribute name
+			for i in range(0, len(x.fieldTable)):
+				if(x.fieldTable[i].name == self.name							
+					and x.fieldTable[i].applicability == "static"):
+					return x.fieldTable[i]
+			# if the field isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# field
+			return self.searchSuperClassesForField(cType, "static", self.name)
+		else:
+			# in all other cases we use the type of the base expression
+			# and use that to execute name resolution
+			cType = self.base.getType(containingClass).whichType
+			x = DecafClass.classes[cType]
+			# resolving an attribute name
+			for i in range(0, len(x.fieldTable)):
+				if(x.fieldTable[i].name == self.name							
+					and x.fieldTable[i].applicability == "instance"):
+					return x.fieldTable[i]
+					
+			# if the field isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# field
+			
+			return self.searchSuperClassesForField(cType, "instance", self.name)
+	
+	def getType(self, containingClass):
+		# if the base is a class name as opposed to a variable that
+		# has a class type then the base ought to be considered a class
+		# literal
+		# we will also need to perform name resolution on the given name
+		# note that we need only the type of the resolved name as opposed
+		# to the actual variable
+		
+		if(self.type is None):
+			# perform name resolution and set the type to the
+			# type of the returned field record
+			check = self.nameResolution(containingClass)
+			if (check is None):
+				print "ERROR - Field with name "+self.name+" could not be found. Line "+str(self.startLine)+"."
+				self.type = TypeRecord("ERROR")
+			else:
+				self.id = check.id
+				self.type = check.type
+		
+		return self.type
 	
 class MethodCallExpression:
 
@@ -977,6 +1168,7 @@ class MethodCallExpression:
 		self.args = args
 		self.startLine = startLine
 		self.endLine = endLine
+		self.type = None
 			
 	def toString(self):
 		s = "MethodCall( "
@@ -993,10 +1185,202 @@ class MethodCallExpression:
 			s += "\n"
 			for i in range(0, len(self.args)-1):
 				s += self.args[i].toString()+", \n"
-			s += self.args[len(self.args-1)].toString()+" \n"			
-		s += "])"		
+			s += self.args[len(self.args)-1].toString()+" \n"			
+		s += "])"
+		s += ", "
+		s += str(self.id)
 		s += " )"
 		return s
+		
+	# Useful method to help shorten name resolution code
+	# Searches all of the superclasses of the base class until a public
+	# method that matches the method parameter as well as the 
+	# applicability parameter is found and returned
+	# Note that matching a method requires a bit more detail
+	# than matching a field name and here we do NOT check that
+	# the argument expressions are type correct
+	# Upon failure, 'None' is returned
+	def searchSuperClassesForMethod(baseClassType, applicability, methodName, methodParameters):	
+		if(baseClassType in DecafClass.classes):
+			search = DecafClass.classes[baseClassType]
+		else:
+			return None
+		
+		if(search.superName is None):
+			return None
+		
+		if not (search.superName in DecafClass.classes):
+			return None
+		
+		x = DecafClass.classes[search.superName]	
+		loop = True
+		resolve = None
+		while(loop):
+			# search the method table for the name
+			# note that for CSE 304 we do not worry about method
+			# overloading so this part of the code is somewhat simplified
+			for i in range(0, len(x.methodTable)):
+				if(x.methodTable[i].visibility == "public"
+					and x.methodTable[i].name == name
+					and x.methodTable[i].applicability == applicability):
+					resolve = x.methodTable[i]
+					# ensure that the method makes sense, specifically 
+					# that each actual parameter is a subtype of each
+					# respective formal parameter					
+					if(len(resolve.parameters) != len(methodParameters)):
+						resolve = None
+					else:
+						for j in range(0, len(resolve.parameters)):
+							if not (methodParameters[j].type.isSubType(resolve.parameters[j].type)):
+								resolve = None
+					
+					# if we find a method then we break the loop
+					if not (resolve is None):
+						loop = False
+						break
+		
+			# if the field table doesn't contain the name
+			# then we search the super class																
+			# but if there is no super class, then we break the
+			# loop
+			if ( not (x.superName is None) 
+				and (x.superName in DecafClass.classes)):
+				x = DecafClass.classes[x.superName]
+			else:
+				loop = False
+				
+		# upon exiting the while loop, we either have successfully
+		# resolved the name or not
+		return resolve
+		
+	# This method will return a method record by searching the AST using the
+	# base and args values of this expression.
+	# The approach is to begin at the base class and using its definition
+	# check whether or not a visible method matches the name and args values
+	# of this expression.
+	# If an applicable method is not found, then each superclass of the given
+	# base class is checked sequentially in the same way.
+	# If no method is found after searching all superclasses then name
+	# resolution has failed and 'None' is returned signalling failure.
+	def nameResolution(self, containingClass):
+				
+		# if the base class is a built-in type then an error is present
+		if( not isinstance(self.base, ThisExpression) and self.base.getType(containingClass).isBuiltIn()):
+			return None
+		
+		# the algorithm is slightly different if we're dealing directly with
+		# a 'ThisExpression'
+		if isinstance(self.base, ThisExpression):
+			# resolving a method name
+			x = containingClass
+			for i in range(0, len(x.methodTable)):
+				if(x.methodTable[i].name == self.name							
+					and x.methodTable[i].applicability == "instance"):
+					resolve = x.methodTable[i]
+					# ensure that the method makes sense, specifically 
+					# that each actual parameter is a subtype of each
+					# respective formal parameter					
+					if(len(resolve.parameters) != len(self.args)):
+						resolve = None
+					else:
+						for j in range(0, len(resolve.parameters)):
+							if not (self.args[j].type.isSubType(resolve.parameters[j].type)):
+								resolve = None
+						
+					# if we find a method then we return it
+					if not (resolve is None):
+						return resolve
+										
+			# if the field isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# method
+			return searchSuperClassesForMethod(x.name, "instance", self.name, self.args)
+		elif( isinstance(self.base, VariableExpression) and self.base.isClassLiteral):
+			# the algorithm also changes a bit when you're dealing with
+			# a class literal
+			cType = self.base.type.whichType
+			x = DecafClass.classes[cType]			
+			# resolving a method name
+			for i in range(0, len(x.methodTable)):
+				if(x.methodTable[i].name == self.name							
+					and x.methodTable[i].applicability == "static"):
+					resolve = x.methodTable[i]
+					# ensure that the method makes sense, specifically 
+					# that each actual parameter is a subtype of each
+					# respective formal parameter					
+					if(len(resolve.parameters) != len(self.args)):
+						resolve = None
+					else:
+						for j in range(0, len(resolve.parameters)):
+							if not (self.args[j].type.isSubType(resolve.parameters[j].type)):
+								resolve = None
+						
+					# if we find a method then we return it
+					if not (resolve is None):
+						return resolve
+			# if the method isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# method
+			return searchSuperClassesForMethod(cType, "static", self.name, self.args)
+		else:
+			# in all other cases we use the type of the base expression
+			# and use that to execute name resolution
+			cType = self.base.getType(containingClass).whichType
+			x = DecafClass.classes[cType]			
+			# resolving a method name
+			for i in range(0, len(x.methodTable)):
+				if(x.methodTable[i].name == self.name							
+					and x.methodTable[i].applicability == "instance"):
+					resolve = x.methodTable[i]
+					# ensure that the method makes sense, specifically 
+					# that each actual parameter is a subtype of each
+					# respective formal parameter
+					if(len(resolve.parameters) != len(self.args)):
+						resolve = None
+					else:
+						for j in range(0, len(resolve.parameters)):
+							if not (self.args[j].type.isSubType(resolve.parameters[j].type)):
+								resolve = None
+						
+					# if we find a method then we return it
+					if not (resolve is None):
+						return resolve
+						
+			# if the method isn't found in the immediate class
+			# then we search each successive superclass for a visible
+			# method
+			return searchSuperClassesForMethod(cType, "instance", self.name, self.args)
+	
+	def getType(self, containingClass):
+		
+		if(self.type is None):
+		
+			# in order to determine the type of this expression
+			# we must first ensure that all of the expressions found in the
+			# arguments list are not "ERROR" (that is, they are type correct)
+			argsTypeCorrect = True
+			for i in range(0, len(self.args)):
+				if(self.args[i].getType(containingClass).whichType == "ERROR"):
+					argsTypeCorrect = False
+			
+			if not argsTypeCorrect:
+				print "ERROR - A method argument isn't type correct. Line "+str(self.startLine)+"."
+				return TypeRecord("ERROR")
+			
+			
+			# now that we know the arguments are type correct we can proceed
+			# to perform name resolution and set the type to the
+			# type of the returned method record's declared return type
+			check = self.nameResolution(containingClass)
+			if (check is None):
+				print "ERROR - A method with the name "+self.name+" could not be found. Line "+str(self.startLine)+"."
+				self.type = TypeRecord("ERROR")
+			else:
+				self.id = check.id
+				self.type = check.returnType
+		
+		return self.type
+	
 	
 class NewObjectExpression:
 
@@ -1005,11 +1389,11 @@ class NewObjectExpression:
 		self.args = args
 		self.startLine = startLine
 		self.endLine = endLine
+		self.type = None
 		
 	def toString(self):
 		s = "NewObject( "		
 		if not (self.base is None):
-			# TODO this may be an error....
 			if isinstance(self.base, str):
 				s += self.base+", "
 			else:
@@ -1020,9 +1404,78 @@ class NewObjectExpression:
 			for i in range(0, len(self.args)-1):
 				s += self.args[i].toString()+", \n"
 			s += self.args[len(self.args)-1].toString()+" \n"			
-		s += "])"		
+		s += "])"
+		s += ", "
+		s += str(self.id)
 		s += " )"
 		return s
+		
+	# Name resolution for constructors is relatively straightforward since
+	# we do not need to search superclasses in the AST in comparison to
+	# name resolution for either methods or fields
+	def nameResolution(self, containingClass):
+		
+		# We use the name of the class that we're constructing
+		# to execute name resolution
+		cType = self.base
+		if not (cType in DecafClass.classes):
+			return None
+		x = DecafClass.classes[cType]
+		
+		# resolving a constructor
+		for i in range(0, len(x.constructorTable)):
+			if(x.constructorTable[i].name == self.base):
+				# I'm not entirely certain how constructors are supposed
+				# to work with visibility and applicability, that is I don't
+				# know what is meant by a static constructor or a private
+				# constructor. This isn't elaborated on in the manual either.
+				resolve = x.constructorTable[i]
+				# ensure that the constructor makes sense, specifically 
+				# that each actual parameter is a subtype of each
+				# respective formal parameter
+				if(len(resolve.parameters) != len(self.args)):
+					resolve = None
+				else:
+					for j in range(0, len(resolve.parameters)):
+						if not (self.args[j].type.isSubType(resolve.parameters[j].type)):
+							resolve = None
+					
+				# if we find a method then we return it
+				if not (resolve is None):
+					return resolve
+					
+		# if the method isn't found in the immediate class
+		# then we return 'None' to signify an error
+		return None
+	
+	def getType(self, containingClass):
+		
+		if(self.type is None):
+		
+			# in order to determine the type of this expression
+			# we must first ensure that all of the expressions found in the
+			# arguments list are not "ERROR" (that is, they are type correct)
+			argsTypeCorrect = True
+			for i in range(0, len(self.args)):
+				if(self.args[i].getType(containingClass).whichType == "ERROR"):
+					argsTypeCorrect = False
+			
+			if not argsTypeCorrect:
+				print "ERROR - A constructor argument isn't type correct. Line "+str(self.startLine)+"."
+				return TypeRecord("ERROR")
+						
+			# now that we know the arguments are type correct we can proceed
+			# to perform name resolution and set the type to the
+			# name of the constructed object's class
+			check = self.nameResolution(containingClass)
+			if (check is None):
+				print "ERROR - Constructor for class "+self.base+" could not be resolved. Line "+str(self.startLine)+"."
+				self.type = TypeRecord("ERROR")
+			else:
+				self.id = check.id
+				self.type = TypeRecord(self.base)
+		
+		return self.type
 		
 class ThisExpression:
 
@@ -1030,10 +1483,15 @@ class ThisExpression:
 		self.represents = "this"
 		self.startLine = startLine
 		self.endLine = endLine
+		self.type = None
 			
 	def toString(self):
 		s = "This"
 		return s
+		
+	def getType(self, containingClass):
+		self.type = TypeRecord(containingClass.name)
+		return self.type
 		
 class SuperExpression:
 
@@ -1046,6 +1504,14 @@ class SuperExpression:
 		s = "Super"
 		return s
 		
+	def getType(self, containingClass):
+		if (containingClass.superName is None):
+			print "ERROR - No superclass found. Line "+str(self.startLine)+"."
+			return TypeRecord("ERROR")
+		else:
+			return TypeRecord(containingClass.superName) 
+
+# unused expression :(
 class ClassReferenceExpression:
 
 	def __init__(self, name, startLine, endLine):
