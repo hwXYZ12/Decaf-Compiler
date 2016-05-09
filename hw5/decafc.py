@@ -6,6 +6,7 @@ where <filename> is the name of the file containing the Decaf program.
 import sys
 import getopt
 from decafparser import classes
+from ast import DecafClass
 
 import decafparser
 
@@ -45,14 +46,24 @@ def main(argv=None):
 			for c in classes:
 				c.typeCheck()
 
-			# debug code
+			# TODO debug code
 			# print each class from the generated list of decaf classes
 			#for c in classes:
 			#	c.printClass()
+			
+			# open a file to write the AMI instructions to
+			newFileName = filename + ".ami"
+			amiFile = open(newFileName, 'w')
 				
-			# print the AMI for each class
+			# write the AMI for each class to the
+			# ami output file
 			for c in classes:
-				print c.getAMI()
+				amiFile.write(c.getAMI())
+				
+			# write a single line static directive
+			amiFile.write(".static_data "+str(DecafClass.totalStaticFields))
+			
+			amiFile.close()
 			
         else:
             print "Failure: there were errors."

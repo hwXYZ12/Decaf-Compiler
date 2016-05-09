@@ -517,19 +517,19 @@ def p_assign_equals(p):
 	pass
 def p_assign_post_inc(p):
 	'assign : lhs INC'
-	p[0] = AutoExpression(p[1], "increment", "post-increment", p.lineno(1), p.lineno(2))
+	p[0] = AutoExpression(p[1], "increment", "post", p.lineno(1), p.lineno(2))
 	pass
 def p_assign_pre_inc(p):
 	'assign : INC lhs'
-	p[0] = AutoExpression(p[2], "increment", "pre-increment", p.lineno(1), p.lineno(2))
+	p[0] = AutoExpression(p[2], "increment", "pre", p.lineno(1), p.lineno(2))
 	pass
 def p_assign_post_dec(p):
 	'assign : lhs DEC'
-	p[0] = AutoExpression(p[1], "decrement", "post-decrement", p.lineno(1), p.lineno(2))
+	p[0] = AutoExpression(p[1], "decrement", "post", p.lineno(1), p.lineno(2))
 	pass
 def p_assign_pre_dec(p):
 	'assign : DEC lhs'
-	p[0] = AutoExpression(p[2], "decrement", "pre-decrement", p.lineno(1), p.lineno(2))
+	p[0] = AutoExpression(p[2], "decrement", "pre", p.lineno(1), p.lineno(2))
 	pass
 
 # CSE 304 doesn't consider arrays, edited to reflect this

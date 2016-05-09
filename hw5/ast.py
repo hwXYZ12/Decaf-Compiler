@@ -1,7 +1,12 @@
 class DecafClass:
 	
 	classes = {}
+	staticOffset = 0
 	
+	# a static attribute used to help determine the size
+	# of the static area heap that will be allocated
+	totalStaticFields = 0
+		
 	def __init__(self, name, superName, declarations):
 		self.name = name
 		self.superName = superName
@@ -14,10 +19,8 @@ class DecafClass:
 		# update the class with the declarations list and subsequently
 		# update each of the symbol tables produced for each declaration
 		# with the class name
-		# must also reset the class counters for methods, fields, and constructors
-		ConstructorRecord.constructorCounter = 1
+		# we must also reset the class counters for fields
 		FieldRecord.fieldCounter = 1
-		MethodRecord.methodCounter = 1
 		
 		for record in declarations:
 			if isinstance(record, FieldRecord):
@@ -129,10 +132,6 @@ class DecafClass:
 			if not (m.typeCheck(self)):
 				print "ERROR - A type error in a method has occurred."
 		
-	# a static attribute used to help determine the size
-	# of the static area heap that will be allocated
-	totalStaticFields = 0
-		
 	# convert the class to Abstract Machine Instructions
 	# and return the result as a string
 	def getAMI(self):
@@ -143,18 +142,23 @@ class DecafClass:
 		# and concatenate the result
 		for c in self.constructorTable:	
 			s += c.getAMI(self)
-			s += "\n"			
+			# each constructor doesn't have a return
+			# statement for the compiler to automatically
+			# append a 'ret' instruction so we must add one
+			# here
+			s += "\nret"
+			s += "\n\n"	# newline characters added for readability
 		
 		# convert each method to Abstract Machine Instructions
 		# and concatenate the result		
 		for m in self.methodTable:
 			s += m.getAMI(self)
-			s += "\n"
+			s += "\n\n"
 			
 		# count each static field in the class
 		for f in self.fieldTable:
 			if(f.applicability == "static"):
-				totalStaticFields+=1
+				DecafClass.totalStaticFields+=1
 				
 		return s
 
@@ -171,6 +175,13 @@ class FieldRecord:
 		self.applicability = applicability
 		self.type = type
 		FieldRecord.fieldCounter+=1
+		
+		# when a new static field record is added to the
+		# AST it is assigned a static offset for later
+		# use
+		if(applicability == "static"):
+			self.staticOffset = DecafClass.staticOffset
+			DecafClass.staticOffset += 1
 		
 	def printField(self):
 		s = "FIELD: "
@@ -236,11 +247,13 @@ class ConstructorRecord:
 		# the first instruction is always a label of the form
 		# 'C_%s_%d' where %s is the name of the class and %d
 		# is the unique id
-		s = self.getAMILabel()+":\n"
+		s = self.getAMILabel()+":"
 		
 		# the block that this method contains is converted
-		# to AMI and concatenated with the returned string
-		s += self.block.getAMI(containingClass, self, "NONE", "NONE")
+		# to AMI and concatenated with the returned string		
+		t = self.block.getAMI(containingClass, self, "NONE", "NONE")
+		if (t != ""):
+			s += "/n" + t
 		
 		return s
 		
@@ -260,7 +273,7 @@ class MethodRecord:
 		self.parameters = parameters
 		self.block = block
 		self.id = MethodRecord.methodCounter
-		MethodRecord.methodCounter+=1
+		MethodRecord.methodCounter += 1
 		self.branchCounter = 0
 		self.tempRegCounter = -1
 		
@@ -662,7 +675,7 @@ class ForStatement:
 		# we need both to generate the code that will compute the condition
 		# and we also need the resulting register
 		condition = self.loopCond.getAMI(containingClass, declaration, breakLabel, continueLabel)
-		cReg = self.cond.resultReg
+		cReg = self.loopCond.resultReg
 		
 		# start with the init expression
 		s = self.init.getAMI(containingClass, declaration, breakLabel, continueLabel) + "\n"
@@ -676,7 +689,7 @@ class ForStatement:
 		s += startLoop+":\n"
 		
 		# first we evaluate the condition expression
-		s = condition + "\n"
+		s += condition + "\n"
 		
 		# now we add the rest of the branching structure described above
 		s += "bz "+cReg+", "+endLoop+"\n"
@@ -716,7 +729,9 @@ class ReturnStatement:
 	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
 		# Generating the code for the return statement will also generate another
 		# register. We move that result to the a0 register and add a 'ret' instruction
-		s = self.ret.getAMI(containingClass, declaration, breakLabel, continueLabel)+"\n"
+		s = self.ret.getAMI(containingClass, declaration, breakLabel, continueLabel)
+		if (s != ""):
+			s += "\n"
 		s += "move a0, "+self.ret.resultReg+"\n"
 		s += "ret"
 		return s
@@ -897,8 +912,11 @@ class BlockStatement:
 		s = ""
 		for stmt in self.stmts:
 			temp = stmt.getAMI(containingClass, declaration, breakLabel, continueLabel)	
-			if (temp != ""):
-				s += temp + "\n"
+			if(temp != ""):
+				if (s != ""):
+					s += "\n"+temp
+				else:
+					s += temp
 		return s
 		
 class ContinueStatement:
@@ -995,11 +1013,10 @@ class VariableDeclarationStatement:
 		for x in whichBlock.variableTable:
 			y = whichBlock.variableTable[x]
 			if (y.localOrFormal == "local"):
-				# get a new register for each local variable
-				declaration.tempRegCounter += 1		
+				# get a new register for each local variable	
 				if(y.currentRegister is None):
-					y.currentRegister = "t"+str(declaration.tempRegCounter)
-				
+					declaration.tempRegCounter += 1	
+					y.currentRegister = "t"+str(declaration.tempRegCounter)					
 		return ""
 
 # a class per expression type
@@ -1071,9 +1088,10 @@ class ConstantStringExpression:
 		return self.type
 		
 	# for hw 5, we aren't considering string constants
-	# def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
 		# return the constant as it is
-		# return str(info)
+		self.resultReg = "NO RESULT REGISTER"
+		return "IGNORE"
 		
 class ConstantNullExpression:
 
@@ -1211,7 +1229,13 @@ class VariableExpression:
 		# that this expression represents a local or formal variable or a
 		# class literal.
 		if (self.isClassLiteral):
-			# TODO I'll get back to this in a bit...
+			# If a variable expression is a class literal
+			# then the compiler when producing AMI code
+			# will use the static area pointer
+			# which is kept in a register denoted sap.
+			# Thus the result register after evaluating
+			# the variable expression is 'sap'
+			self.resultReg = "sap"
 			return ""
 		else:
 			# return the appropriate register
@@ -1524,17 +1548,17 @@ class BinaryExpression:
 						
 			# get new registers
 			declaration.tempRegCounter += 1
-			temp1 = "t"+declaration.tempRegCounter
+			temp1 = "t"+str(declaration.tempRegCounter)
 			declaration.tempRegCounter += 1
-			temp2 = "t"+declaration.tempRegCounter
+			temp2 = "t"+str(declaration.tempRegCounter)
 			declaration.tempRegCounter += 1
-			temp3 = "t"+declaration.tempRegCounter
+			temp3 = "t"+str(declaration.tempRegCounter)
 			
-			if(operand1.type.whichType == "FLOAT"):				
+			if(self.operand1.type.whichType == "FLOAT"):				
 				s+= "ftoi "+temp1+", "+r1+"\n"			
 			else:
 				s+= "move "+temp1+", "+r1+"\n"
-			if(operand2.type.whichType == "FLOAT"):								
+			if(self.operand2.type.whichType == "FLOAT"):								
 				s+= "ftoi "+temp2+", "+r2+"\n"		
 			else:
 				s+= "move "+temp2+", "+r2+"\n"
@@ -1647,7 +1671,14 @@ class AssignExpression:
 		rightReg = self.rightHandSide.resultReg
 		
 		# then we move the righthandside into the lefthandside
-		s += "move "+leftReg+", "+rightReg
+		# in the case that the left hand side represents
+		# a FieldAccessExpression we must use a heap store
+		# as opposed to a move instruction
+		if(isinstance(self.leftHandSide, FieldAccessExpression)):
+			address, offset = self.leftHandSide.resultAO
+			s += "hstore "+address+", "+offset+", "+rightReg
+		else:
+			s += "move "+leftReg+", "+rightReg
 		
 		return s
 		
@@ -1680,6 +1711,49 @@ class AutoExpression:
 				self.type = TypeRecord("ERROR")
 		return self.type
 		
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+		if(self.type.whichType == "INT"):
+			type = "i"
+		elif(self.type.whichType == "FLOAT"):
+			type = "f"
+		
+		if(self.incOrDec == "increment"):
+			val = "1"
+		else:
+			val = "-1"			
+		
+		# get a new temporary register to store the
+		# result of the expression
+		declaration.tempRegCounter += 1
+		self.resultReg = "t"+str(declaration.tempRegCounter)
+		
+		s = self.operand.getAMI(containingClass, declaration, breakLabel, continueLabel)
+		if(self.postOrPre == "post"):
+			s += "move "+self.resultReg+", "+self.operand.resultReg+"\n"
+				
+		# get a new temporary register to
+		# perform the operation
+		declaration.tempRegCounter += 1
+		tempReg = "t"+str(declaration.tempRegCounter)
+		
+		# perform the operation on the operand
+		s += "move_immediate_"+type+" "+tempReg+", "+val+"\n"
+		s += type+"add "+self.operand.resultReg+", "+self.operand.resultReg+", "+tempReg
+		
+		if(isinstance(self.operand, FieldAccessExpression)):
+			# in the case that the operation is performed
+			# on a field access then we must store the result in
+			# the heap
+			address, offset = self.operand.resultAO
+			s += "\nhstore "+address+", "+offset+", "+self.operand.resultReg
+			
+		if(self.postOrPre == "pre"):
+			s += "\nmove "+self.resultReg+", "+self.operand.resultReg
+			
+		return s
+		
+			
+	
 class FieldAccessExpression:
 
 	def __init__(self, base, name, startLine, endLine):
@@ -1825,6 +1899,153 @@ class FieldAccessExpression:
 				self.type = check.type
 		
 		return self.type
+		
+	# Field access expressions in the context of this compiler
+	# explicitly represent attributes of a particular base
+	# object (or represent a static field access)
+	# and although field access expressions overlap
+	# with method call expressions in the attribute grammar it
+	# is the case that field access expression objects created
+	# during the creation of method call expressions are
+	# unreachable within the AST.
+	# Thus the AMI for a field expression begins with evaluating
+	# the base expression and proceeds to use the result to
+	# get a pointer to the object record that corresponds to the
+	# evaluated expression and finally the offset of the 'name'
+	# attribute is determined and used to properly access the
+	# heap and retrieve the correct address
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+	
+		# evaluation of this expression is almost entirely
+		# different in the case that the base expression actually
+		# denotes a static field access
+		s = ""
+		if (isinstance(self.base, VariableExpression)
+			and self.base.isClassLiteral):
+			
+			# to start, name resolution will yield the
+			# relevant field record			
+			field = self.nameResolution(containingClass)
+			
+			# We must determine the
+			# offset of each static field with respect to the
+			# static area pointer
+			# all of the static data is placed in one area
+			# and it doesn't matter all that much how the
+			# offsets are organized as long as the offsets
+			# are used consistently
+			# this means that we can assign a new offset
+			# to a static field as it is added to the AST
+			# and use that offset here when we need it
+				
+			# at this point we should have the correct offset
+			# for the field and can generate the AMI to load
+			# the field
+			
+			# get a new temporary register to place the
+			# accessed value in
+			declaration.tempRegCounter += 1
+			self.resultReg = "t"+str(declaration.tempRegCounter)
+			
+			# get another temp register to handle the offset
+			declaration.tempRegCounter += 1
+			offsetReg = "t"+str(declaration.tempRegCounter)
+			
+			# place the offset into a register
+			s += "move_immediate_i "+offsetReg+", "+str(field.staticOffset)+"\n"
+			
+			# return the address and offset pair as a tuple
+			self.resultAO = ("sap", offsetReg)
+			
+			# access the field in the static data area
+			# and move the result to
+			# the result register
+			s += "hload "+self.resultReg+", sap, " + offsetReg
+			
+			return s
+			
+		# in the case that we're dealing with a
+		# non-static field access...
+		
+		s += self.base.getAMI(containingClass, declaration, breakLabel, continueLabel)		
+		
+		# How do we know what the offset of a field is?
+		# We can use name resolution to determine the
+		# field record that this expression refers to except
+		# we need to derive the offset of the field with respect
+		# to the class that contains it
+		# Part of the problem is that if the class that
+		# contains the field
+		# is a base class then we can walk through the field table
+		# one field at a time to determine the field offset
+		# In the case that the field belongs to a subclass
+		# then we will need to add to the offset the size of the
+		# field table for each super class
+		field = self.nameResolution(containingClass)
+		
+		# walk the field table of the class that contains
+		# the field
+		whichClass = DecafClass.classes[field.containingClass]
+		tableSize = len(whichClass.fieldTable)
+		offset = 0
+		for i in range(0, tableSize):
+			if(field == whichClass.fieldTable[i]):
+				break
+			else:
+				offset += 1
+				
+		# add offsets for all non-static fields of superclasses
+		superClassName = whichClass.superName
+		while( not superClassName is None and superClassName != ""):
+			# get the super class
+			superClass = DecafClass.classes[superClassName]
+			# add the size of the super class field table
+			# to the offset without including static fields
+			for x in superClass.fieldTable:
+				if(x.applicability == "instance"):
+					offset += 1
+			# get the name of the next super class
+			superClassName = superClass.superName
+			
+		# at this point we should have the correct offset
+		# for the field and can generate the AMI to load
+		# the field from the object record
+		
+		# The next problem we have is that contextually we
+		# don't know if we want to return the address
+		# and offset pair that represents this field access
+		# or if we simply wish to return the value of the field
+		# access. We may need to return both!		
+		# Since we cannot know if we need both then
+		# we return both everytime in .resultReg and
+		# .resultAO
+		
+		# get a new temporary register to place the
+		# accessed value in
+		declaration.tempRegCounter += 1
+		self.resultReg = "t"+str(declaration.tempRegCounter)
+		
+		# get another temp register to handle the offset
+		declaration.tempRegCounter += 1
+		offsetReg = "t"+str(declaration.tempRegCounter)
+		
+		# place the offset into a register
+		s += "move_immediate_i "+offsetReg+", "+str(offset)+"\n"
+		
+		# return the address and offset pair as a tuple
+		self.resultAO = (self.base.resultReg, offsetReg)
+		
+		# The result register of the base is expected to
+		# contain the address of an object record
+		# and name resolution has been used to determine the 
+		# offset of the named attribute
+		
+		# access the object record on the heap
+		# and move the result to
+		# the result register
+		s += "hload "+self.resultReg+", "+self.base.resultReg +", " + offsetReg
+				
+		return s
 	
 class MethodCallExpression:
 
@@ -2047,6 +2268,131 @@ class MethodCallExpression:
 		
 		return self.type
 	
+	# Returns AMI for this method call as a string
+	# Method calls make use of the control stack to save and
+	# restore registers
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+		
+		# the first order of business translating
+		# a method call to AMI is to use name resolution
+		# to find the method record in the AST that this
+		# method call refers to		
+		method = self.nameResolution(containingClass)
+		
+		# we also need to keep track of the registers that
+		# are to be restored after the method returns
+		
+		# Saving registers gets a bit complicated....
+		# In order to be absolutely certain that the registers
+		# used in the caller aren't overwritten upon returning
+		# to the caller we must save all of them on the call
+		# stack
+		# How do we know which registers to save?
+		# We must save all of the argument registers of the
+		# caller as well as all of the temporary registers
+		# of the caller. These correspond to the local and
+		# formal variables of the caller.
+		# Each variable must then be popped off the control
+		# stack after the method returns.
+		savedArgRegs = 0		
+		argumentCounter = 0 # this variable will be used later
+		s = ""
+		# which registers are manipulated also depends
+		# on whether the called method is static or instance
+		# as the first register will hold the 
+		# implicit 'this' object for an instance method
+		# In any of these three cases we must save the
+		# a0 register
+		isThisExpression = isinstance(self.base, ThisExpression)
+		if (declaration.applicability == "instance"):			
+			s += "save a0\n"
+			savedArgRegs += 1
+		elif(method.applicability == "instance"
+			and not isThisExpression):			
+			s += "save a0\n"
+			savedArgRegs += 1
+		elif(isThisExpression):
+			s += "save a0\n"
+			savedArgRegs += 1
+			
+		# In this case we must properly set the a0
+		# register
+		if(method.applicability == "instance"
+			and not isThisExpression):	
+			# Move 'this' into a0
+			# How do we get 'this'? 'this' is represented as
+			# an address to a location on the heap
+			# Where can we find that address?
+			# That address should be accessible after
+			# resolving the base expression as the base
+			# expression represents the instance object
+			# that owns the method
+			
+			# resolve the expression and use the address of the
+			# class instance
+			t = self.base.getAMI(containingClass, declaration, breakLabel, continueLabel)
+			s += t
+			if (t != ""):
+				s += "\n"
+			addressReg, offset = self.base.resultAO
+			s += "move a0, "+addressReg+"\n"
+			argumentCounter = 1			
+					
+		# for each argument of the calling method
+		# we save another register on the control stack
+		temp = declaration.block.variableTable
+		for x in temp.keys():
+			if (temp[x].localOrFormal == "formal"):
+				s += "save a"+str(savedArgRegs)+"\n"
+				savedArgRegs += 1
+				
+		# Every temporary register used in the declaration
+		# up to this point must be saved on the control stack
+		for i in range(0, declaration.tempRegCounter+1):
+			s += "save t"+str(i)+"\n"
+	
+		# keep track of the number of saved registers
+		savedTempRegs = declaration.tempRegCounter
+	
+		# for each argument replace the current argument register		
+		# with the contents of the register retrieved after resolving
+		# the argument expression
+		for i in range(0, len(self.args)):
+			t = self.args[i].getAMI(containingClass, declaration, breakLabel, continueLabel)
+			s += t
+			if(t != ""):
+				s += "\n"
+			s += "move a"+str(argumentCounter)+", "+self.args[i].resultReg+"\n"
+			argumentCounter += 1
+			
+		# now that the pre-call state has been setup
+		# appropriately we can jump to the method label
+		# we use a "call" instruction to properly make
+		# use of the control stack
+		s += "call "+method.getAMILabel()
+		
+		# after the call returns but before we restore
+		# argument registers we want to ensure that we
+		# communicate the return value of the called
+		# method
+		# generate a temporary register and use it
+		# to store the return value
+		declaration.tempRegCounter += 1
+		self.resultReg = "t"+str(declaration.tempRegCounter)
+		s += "\nmove "+self.resultReg+", a0"
+		
+		# after the call returns we restore each argument
+		# register as well as each temporary register
+		# to their pre-call states
+		# (excluding the last temporary register)
+		for i in range(savedTempRegs, -1, -1):
+			s += "\nrestore t"+str(i)
+			
+		for i in range(savedArgRegs-1, -1, -1):
+			s += "\nrestore a"+str(i)
+		
+		return s
+		
 	
 class NewObjectExpression:
 
@@ -2106,11 +2452,11 @@ class NewObjectExpression:
 						if not (self.args[j].type.isSubType(resolve.parameters[j].type)):
 							resolve = None
 					
-				# if we find a method then we return it
+				# if we find a constructor then we return it
 				if not (resolve is None):
 					return resolve
 					
-		# if the method isn't found in the immediate class
+		# if the constructor isn't found in the immediate class
 		# then we return 'None' to signify an error
 		return None
 	
@@ -2142,6 +2488,132 @@ class NewObjectExpression:
 				self.type = TypeRecord(self.base)
 		
 		return self.type
+
+	# Generates the AMI code for creating a new instance
+	# of an object and returns the code as a string
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+		
+		# To start we will need to allocate some space
+		# on the heap and must know how much space to
+		# allocate. This is determined by the number of instance
+		# variables present in class for which a new instance
+		# is being generated as well as the number of instance
+		# variables of each superclass
+		
+		# We'll need to correctly resolve the name of the
+		# constructor as well as the associated class
+		# Fortunately constructors aren't overloaded for this
+		# assignment so this becomes a bit easier
+		whichClass = DecafClass.classes[self.base]
+		constructor = self.nameResolution(containingClass)
+		
+		# Now we need to count the instance variables
+		# of this new object
+		instanceCount = 0
+		for x in whichClass.fieldTable:
+			if(x.applicability == "instance"):
+				instanceCount += 1
+		
+		# We also factor in the instance variables of
+		# each superclass
+		superClassName = whichClass.superName
+		while( not superClassName is None and superClassName != ""):
+			superClass = DecafClass.classes[superClassName]				
+			for x in superClass.fieldTable:
+				if(x.applicability == "instance"):
+					instanceCount += 1
+			superClassName = superClass.superName
+			
+		# Now that we have all the instance variables accounted
+		# for we can generate a heap allocation and store
+		# the object reference in a new temporary register
+		
+		# generate a temporary register and
+		# store the object reference in it
+		declaration.tempRegCounter += 1
+		objectRef = "t"+str(declaration.tempRegCounter)
+		
+		# generate another temporary register and
+		# store the instance variable count in it
+		declaration.tempRegCounter += 1
+		numVars = "t"+str(declaration.tempRegCounter)
+		
+		s = "move_immediate_i "+numVars+", "+str(instanceCount)+"\n"
+		s += "halloc "+objectRef+", "+numVars+"\n"
+		
+		# The result of evaluating this expression as far as the
+		# compiler is concerned is the register that holds
+		# the object reference
+		self.resultReg = objectRef
+		
+		# As we have done with method calls we must
+		# save all of the argument registers as well
+		# as the temporary registers that correspond
+		# to relevant local variables
+		# before we make a call to construct an object
+		savedArgRegs = 0	# these variables will be used later	
+		argumentCounter = 0
+		if(declaration.applicability == "instance"):
+			# if the calling method is a method of an object
+			# then we must ensure that we save the 'this'
+			# pointer stored in the a0 register
+			s += "save a0\n"
+			savedArgRegs = 1	# these variables will be used later	
+			argumentCounter = 1
+					
+		# for each argument of the calling method
+		# we save another register on the control stack
+		temp = declaration.block.variableTable
+		for x in temp.keys():
+			if (temp[x].localOrFormal == "formal"):
+				s += "save a"+str(savedArgRegs)+"\n"
+				savedArgRegs += 1
+				
+		# Every temporary register used in the declaration
+		# up to this point must be saved on the control stack
+		for i in range(0, declaration.tempRegCounter+1):
+			s += "save t"+str(i)+"\n"
+		
+		# Keep track of the number of saved temporary
+		# registers
+		savedTempRegs = declaration.tempRegCounter
+				
+		# now that we have saved all of the relevant
+		# registers we now save the object reference
+		# register and move its contents into the
+		# 'this' register or the a0 register			
+		s += "move a0, "+objectRef+"\n"
+	
+		# for each argument replace the current argument register		
+		# with the contents of the register retrieved after resolving
+		# the argument expression
+		for i in range(0, len(self.args)):
+			t = self.args[i].getAMI(self, containingClass, declaration, breakLabel, continueLabel)
+			s += t
+			if(t != ""):
+				s += "\n"
+			s += "move a"+str(argumentCounter)+", "+self.args[i].resultReg+"\n"
+			argumentCounter += 1
+			
+		# now that the pre-call state has been setup
+		# appropriately we can jump to the method label
+		# we use a "call" instruction to properly make
+		# use of the control stack
+		s += "call "+constructor.getAMILabel()
+		
+		# constructors do not return any values
+		
+		# after the call returns we restore each argument
+		# register as well as each temporary register
+		# to their pre-call states
+		for i in range(savedTempRegs, -1, -1):
+			s += "\nrestore t"+str(i)
+			
+		# now restore the argument registers
+		for i in range(savedArgRegs-1, -1, -1):
+			s += "\nrestore a"+str(i)
+		
+		return s
 		
 class ThisExpression:
 
@@ -2158,6 +2630,18 @@ class ThisExpression:
 	def getType(self, containingClass):
 		self.type = TypeRecord(containingClass.name)
 		return self.type
+		
+	# The 'this' expression represents the address of the object
+	# record on the heap 
+	# that represents an instance of the class that
+	# the 'this' expression is found in
+	# Since we assume that 'this' is always stored in
+	# register a0 we can set the result register to a0
+	# and return an empty string since there is no AMI code
+	# implicitly associated with evaluating a 'this' expression
+	def getAMI(self, containingClass, declaration, breakLabel, continueLabel):
+		self.resultReg = "a0"
+		return ""
 		
 class SuperExpression:
 
