@@ -1,0 +1,25 @@
+M_scan_int_1:
+
+
+M_scan_float_2:
+
+
+M_print_3:
+
+
+M_print_4:
+
+
+M_print_5:
+
+
+M_print_6:
+
+
+M_main_7:
+IGNORE
+move a0, NO RESULT REGISTER
+call M_print_6
+move t0, a0
+
+.static_data 0

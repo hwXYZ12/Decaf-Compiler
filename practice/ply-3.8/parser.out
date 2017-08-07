@@ -1,0 +1,158 @@
+Created by PLY version 3.8 (http://www.dabeaz.com/ply)
+
+Grammar
+
+Rule 0     S' -> ProductionList
+Rule 1     ProductionList -> Production ProductionList
+Rule 2     ProductionList -> empty
+Rule 3     Production -> LHS RightHand
+Rule 4     RightHand -> NONTERMINAL RightHand
+Rule 5     RightHand -> TERMINAL RightHand
+Rule 6     RightHand -> empty
+Rule 7     empty -> <empty>
+
+Terminals, with rules where they appear
+
+LHS                  : 3
+NONTERMINAL          : 4
+TERMINAL             : 5
+error                : 
+
+Nonterminals, with rules where they appear
+
+Production           : 1
+ProductionList       : 1 0
+RightHand            : 3 4 5
+empty                : 2 6
+
+Parsing method: LALR
+
+state 0
+
+    (0) S' -> . ProductionList
+    (1) ProductionList -> . Production ProductionList
+    (2) ProductionList -> . empty
+    (3) Production -> . LHS RightHand
+    (7) empty -> .
+
+    LHS             shift and go to state 2
+    $end            reduce using rule 7 (empty -> .)
+
+    Production                     shift and go to state 1
+    empty                          shift and go to state 3
+    ProductionList                 shift and go to state 4
+
+state 1
+
+    (1) ProductionList -> Production . ProductionList
+    (1) ProductionList -> . Production ProductionList
+    (2) ProductionList -> . empty
+    (3) Production -> . LHS RightHand
+    (7) empty -> .
+
+    LHS             shift and go to state 2
+    $end            reduce using rule 7 (empty -> .)
+
+    Production                     shift and go to state 1
+    empty                          shift and go to state 3
+    ProductionList                 shift and go to state 5
+
+state 2
+
+    (3) Production -> LHS . RightHand
+    (4) RightHand -> . NONTERMINAL RightHand
+    (5) RightHand -> . TERMINAL RightHand
+    (6) RightHand -> . empty
+    (7) empty -> .
+
+    NONTERMINAL     shift and go to state 9
+    TERMINAL        shift and go to state 6
+    LHS             reduce using rule 7 (empty -> .)
+    $end            reduce using rule 7 (empty -> .)
+
+    RightHand                      shift and go to state 7
+    empty                          shift and go to state 8
+
+state 3
+
+    (2) ProductionList -> empty .
+
+    $end            reduce using rule 2 (ProductionList -> empty .)
+
+
+state 4
+
+    (0) S' -> ProductionList .
+
+
+
+state 5
+
+    (1) ProductionList -> Production ProductionList .
+
+    $end            reduce using rule 1 (ProductionList -> Production ProductionList .)
+
+
+state 6
+
+    (5) RightHand -> TERMINAL . RightHand
+    (4) RightHand -> . NONTERMINAL RightHand
+    (5) RightHand -> . TERMINAL RightHand
+    (6) RightHand -> . empty
+    (7) empty -> .
+
+    NONTERMINAL     shift and go to state 9
+    TERMINAL        shift and go to state 6
+    LHS             reduce using rule 7 (empty -> .)
+    $end            reduce using rule 7 (empty -> .)
+
+    RightHand                      shift and go to state 10
+    empty                          shift and go to state 8
+
+state 7
+
+    (3) Production -> LHS RightHand .
+
+    LHS             reduce using rule 3 (Production -> LHS RightHand .)
+    $end            reduce using rule 3 (Production -> LHS RightHand .)
+
+
+state 8
+
+    (6) RightHand -> empty .
+
+    LHS             reduce using rule 6 (RightHand -> empty .)
+    $end            reduce using rule 6 (RightHand -> empty .)
+
+
+state 9
+
+    (4) RightHand -> NONTERMINAL . RightHand
+    (4) RightHand -> . NONTERMINAL RightHand
+    (5) RightHand -> . TERMINAL RightHand
+    (6) RightHand -> . empty
+    (7) empty -> .
+
+    NONTERMINAL     shift and go to state 9
+    TERMINAL        shift and go to state 6
+    LHS             reduce using rule 7 (empty -> .)
+    $end            reduce using rule 7 (empty -> .)
+
+    RightHand                      shift and go to state 11
+    empty                          shift and go to state 8
+
+state 10
+
+    (5) RightHand -> TERMINAL RightHand .
+
+    LHS             reduce using rule 5 (RightHand -> TERMINAL RightHand .)
+    $end            reduce using rule 5 (RightHand -> TERMINAL RightHand .)
+
+
+state 11
+
+    (4) RightHand -> NONTERMINAL RightHand .
+
+    LHS             reduce using rule 4 (RightHand -> NONTERMINAL RightHand .)
+    $end            reduce using rule 4 (RightHand -> NONTERMINAL RightHand .)
+

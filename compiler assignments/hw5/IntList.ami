@@ -1,0 +1,208 @@
+M_scan_int_1:
+
+
+M_scan_float_2:
+
+
+M_print_3:
+
+
+M_print_4:
+
+
+M_print_5:
+
+
+M_print_6:
+
+
+C_IntList_1:
+ret
+
+M_create_list_7:
+move_immediate_i t2, 2
+halloc t1, t2
+save a0
+save t0
+save t1
+save t2
+move a0, t1
+call C_IntList_1
+restore t2
+restore t1
+restore t0
+restore a0
+move t0, t1
+move_immediate_i t4, 0
+hload t3, t0, t4
+hstore t0, t4, a0
+move_immediate_i t6, 1
+hload t5, t0, t6
+move_immediate_i t7, 0
+hstore t0, t6, t7
+move a0, t0
+ret
+
+M_insert_8:
+save a0
+save a1
+save t0
+move a0, a1
+call M_create_list_7
+move t1, a0
+restore t0
+restore a1
+restore a0
+move t0, t1
+move_immediate_i t3, 1
+hload t2, t0, t3
+hstore t0, t3, a0
+move a0, t0
+ret
+
+M_search_9:
+move_immediate_i t1, 0
+hload t0, a0, t1
+move t3, t0
+move t4, a1
+isub t5, t3, t4
+bz t5, M_search_9_4
+jump M_search_9_3
+M_search_9_3:
+move_immediate_i t2, 0
+jump M_search_9_5
+M_search_9_4:
+move_immediate_i t2, 1
+M_search_9_5:
+bz t2, M_search_9_1
+move_immediate_i t6, 1
+move a0, t6
+ret
+jmp M_search_9_2
+M_search_9_1:
+move_immediate_i t8, 1
+hload t7, a0, t8
+move_immediate_i t9, 0
+move t11, t7
+move t12, t9
+isub t13, t11, t12
+bz t13, M_search_9_9
+jump M_search_9_8
+M_search_9_8:
+move_immediate_i t10, 0
+jump M_search_9_10
+M_search_9_9:
+move_immediate_i t10, 1
+M_search_9_10:
+bz t10, M_search_9_6
+move_immediate_i t14, 0
+move a0, t14
+ret
+jmp M_search_9_7
+M_search_9_6:
+save a0
+move_immediate_i t16, 1
+hload t15, a0, t16
+move a0, a0
+save a1
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+save t10
+save t11
+save t12
+save t13
+save t14
+save t15
+save t16
+move a1, a1
+call M_search_9
+move t17, a0
+restore t16
+restore t15
+restore t14
+restore t13
+restore t12
+restore t11
+restore t10
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+restore a1
+restore a0
+move a0, t17
+ret
+M_search_9_7:
+M_search_9_2:
+
+M_length_10:
+move_immediate_i t1, 1
+hload t0, a0, t1
+move_immediate_i t2, 0
+move t4, t0
+move t5, t2
+isub t6, t4, t5
+bz t6, M_length_10_4
+jump M_length_10_3
+M_length_10_3:
+move_immediate_i t3, 0
+jump M_length_10_5
+M_length_10_4:
+move_immediate_i t3, 1
+M_length_10_5:
+bz t3, M_length_10_1
+move_immediate_i t7, 1
+move a0, t7
+ret
+jmp M_length_10_2
+M_length_10_1:
+move_immediate_i t8, 1
+save a0
+move_immediate_i t10, 1
+hload t9, a0, t10
+move a0, a0
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+save t10
+call M_length_10
+move t11, a0
+restore t10
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+restore a0
+iadd t12, t8, t11
+move a0, t12
+ret
+M_length_10_2:
+
+.static_data 0

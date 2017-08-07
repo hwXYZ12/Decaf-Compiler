@@ -1,0 +1,112 @@
+M_scan_int_1:
+
+
+M_scan_float_2:
+
+
+M_print_3:
+
+
+M_print_4:
+
+
+M_print_5:
+
+
+M_print_6:
+
+
+M_fib_7:
+move_immediate_i t0, 2
+ileq t1, a0, t0
+bz t1, M_fib_7_1
+move_immediate_i t2, 1
+move a0, t2
+ret
+jmp M_fib_7_2
+M_fib_7_1:
+save a0
+save t0
+save t1
+save t2
+move_immediate_i t3, 1
+isub t4, a0, t3
+move a0, t4
+call M_fib_7
+move t5, a0
+restore t2
+restore t1
+restore t0
+restore a0
+save a0
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+move_immediate_i t6, 2
+isub t7, a0, t6
+move a0, t7
+call M_fib_7
+move t8, a0
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+restore a0
+iadd t9, t5, t8
+move a0, t9
+ret
+M_fib_7_2:
+
+M_main_8:
+save t0
+call M_scan_int_1
+move t1, a0
+restore t0
+move t0, t1
+save t0
+save t1
+IGNORE
+move a0, NO RESULT REGISTER
+call M_print_6
+move t2, a0
+restore t1
+restore t0
+save t0
+save t1
+save t2
+save t0
+save t1
+save t2
+move a0, t0
+call M_fib_7
+move t3, a0
+restore t2
+restore t1
+restore t0
+move a0, t3
+call M_print_3
+move t4, a0
+restore t2
+restore t1
+restore t0
+save t0
+save t1
+save t2
+save t3
+save t4
+IGNORE
+move a0, NO RESULT REGISTER
+call M_print_6
+move t5, a0
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+
+.static_data 0

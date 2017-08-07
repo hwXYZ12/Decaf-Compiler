@@ -1,0 +1,373 @@
+1.
+program -> class_decl*
+
+<=>
+
+program : class_decl program
+	| empty
+
+
+2.
+class_decl -> CLASS ID ( EXTENDS ID )? { class_body_decl+ }
+class_body_decl -> field_decl
+		| method_decl
+		| constructor_decl
+
+<=>
+
+class_decl -> CLASS ID ( EXTENDS ID )? placeholder1
+placeholder1 -> { class_body_decl+ }
+class_body_decl -> field_decl
+		| method_decl
+		| constructor_decl
+
+<=>
+
+class_decl -> CLASS ID ( EXTENDS ID ) placeholder1
+	    | CLASS ID placeholder1
+placeholder1 -> { class_body_decl+ }
+class_body_decl -> field_decl
+		| method_decl
+		| constructor_decl
+
+<=>
+
+class_decl : CLASS ID ( EXTENDS ID ) placeholder1
+	   | CLASS ID placeholder1
+placeholder1 : { class_body_decl placeholder2 }
+placeholder2 : class_body_decl placeholder2
+	     | empty
+class_body_decl : field_decl
+		| method_decl
+		| constructor_decl
+
+3.
+field_decl -> modifier var_decl
+modifier -> (PUBLIC | PRIVATE)? (STATIC)?
+var_decl -> type variables ;
+type -> INT
+      | FLOAT
+      | BOOLEAN
+      | ID
+variables -> variable (, variable)*
+variable  -> ID ([])*
+
+***************SINCE WE'RE CSE 304, we're not going to mess around with any array-valued variables or fields (as per instruction), thus we're going to modify this particular grammar rule to reflect that...
+
+field_decl -> modifier var_decl
+modifier -> (PUBLIC | PRIVATE)? (STATIC)?
+var_decl -> type variables ;
+type -> INT
+      | FLOAT
+      | BOOLEAN
+      | ID
+variables -> variable (, variable)*
+variable  -> ID
+
+<=>
+
+field_decl -> modifier var_decl
+modifier -> placeholder3 placeholder4
+placeholder3 -> (PUBLIC | PRIVATE)?
+placeholder4 -> (STATIC)?
+var_decl -> type variables ;
+type -> INT
+      | FLOAT
+      | BOOLEAN
+      | ID
+variables -> variable (, variable)*
+variable  -> ID
+
+<=>
+
+field_decl -> modifier var_decl
+modifier -> placeholder3 placeholder4
+placeholder3 -> PUBLIC | PRIVATE
+	      | empty
+placeholder4 -> STATIC
+	      | empty
+var_decl -> type variables ;
+type -> INT
+      | FLOAT
+      | BOOLEAN
+      | ID
+variables -> variable (, variable)*
+variable  -> ID
+
+<=>
+
+field_decl -> modifier var_decl
+modifier -> placeholder3 placeholder4
+placeholder3 -> PUBLIC | PRIVATE
+	      | empty
+placeholder4 -> STATIC
+	      | empty
+var_decl -> type variables ;
+type -> INT
+      | FLOAT
+      | BOOLEAN
+      | ID
+variables -> variable placeholder5
+placeholder5 -> (, variable)*
+variable  -> ID
+
+<=>
+
+field_decl : modifier var_decl
+modifier : placeholder3 placeholder4
+placeholder3 : PUBLIC
+	     | PRIVATE
+	     | empty
+placeholder4 : STATIC
+	     | empty
+var_decl : type variables ;
+type : INT
+     | FLOAT
+     | BOOLEAN
+     | ID
+variables : variable placeholder5
+placeholder5 : , variable placeholder5
+	     | empty
+variable : ID
+
+4.
+method_decl -> modifier (type | VOID) ID ( formals? ) block
+constructor_decl -> modifier id ( formals? ) block
+formals -> formal_param (, formal_param)*
+formal_param -> type variable
+
+<=>
+
+method_decl -> modifier placeholder6 ID ( placeholder7 ) block
+placeholder6 -> (type | VOID)
+constructor_decl -> modifier id ( placeholder7 ) block
+placeholder7 -> formals?
+formals -> formal_param placeholder8
+placeholder8 -> (, formal_param)*
+formal_param -> type variable
+
+<=>
+
+method_decl : modifier placeholder6 ID ( placeholder7 ) block
+placeholder6 : type
+	     | VOID
+constructor_decl : modifier id ( placeholder7 ) block
+placeholder7 : formals
+	     | empty
+formals : formal_param placeholder8
+placeholder8 : , formal_param placeholder8
+	     | empty
+formal_param : type variable
+
+***As it turns out, this is an ambiguous grammar! We'll notice later that we get a shift/reduce conflict around the IF / ELSE statement, which is something pointed out in the textbook. I might as well fix it here while I have the opportunity. The other ambiguity deals with how ID ID can represent both a variable declaration OR it can be the beginning of a method declaration! I'm not sure how to fix this ambiguity yet.... but as of now the current PLY/yacc default behavior is not what we want!
+
+5.
+In order to solve the if-else ambiguity presented by the manuals description of decaf I looked up a solution online that seems to be reasonable enough. The new grammar looks like this....
+
+r'''block : '{' placeholder9 '}'
+placeholder9 : stmt placeholder9
+	     | empty
+stmt : openStmt
+     | closedStmt
+openStmt : IF '(' expr ')' stmt
+         | IF '(' expr ')' closedStmt ELSE openStmt
+	 | WHILE '(' expr ')' openStmt
+	 | FOR '(' placeholder11 ';' placeholder12 ';' placeholder11 ')' openStmt
+closedStmt : RETURN placeholder12 ';'
+	   | stmt_expr ';'
+	   | BREAK ';'
+	   | CONTINUE ';'
+	   | var_decl
+	   | ';' 
+           | block
+	   | IF '(' expr ')' closedStmt ELSE closedStmt
+	   | WHILE '(' expr ')' closedStmt
+	   | FOR '(' placeholder11 ';' placeholder12 ';' placeholder11 ')' closedStmt
+placeholder11 : stmt_expr
+  	      | empty
+placeholder12 : expr
+	      | empty'''
+
+6.
+literal -> INT_CONST
+	 | FLOAT_CONST
+	 | STRING_CONST
+	 | NULL
+	 | TRUE
+	 | FALSE
+primary -> literal
+	 | THIS
+	 | SUPER
+	 | ( expr )
+	 | NEW ID ( arguments? )
+	 | lhs
+	 | method_invocation
+arguments -> expr (, expr)*
+lhs -> field_access
+     | array_access
+field_access -> primary . ID
+              | ID
+array_access -> primary [ expr ]
+method_invocation -> field_access ( arguments? )
+
+**As mentioned above, we're CSE 304 so we aren't going to concern ourselves with array-valued fields and variables, array expressions, and array creation. In light of this, the above grammar rule is edited.
+
+literal -> INT_CONST
+	 | FLOAT_CONST
+	 | STRING_CONST
+	 | NULL
+	 | TRUE
+	 | FALSE
+primary -> literal
+	 | THIS
+	 | SUPER
+	 | ( expr )
+	 | NEW ID ( arguments? )
+	 | lhs
+	 | method_invocation
+arguments -> expr (, expr)*
+lhs -> field_access
+field_access -> primary . ID
+              | ID
+method_invocation -> field_access ( arguments? )
+
+<=>
+
+literal -> INT_CONST
+	 | FLOAT_CONST
+	 | STRING_CONST
+	 | NULL
+	 | TRUE
+	 | FALSE
+primary -> literal
+	 | THIS
+	 | SUPER
+	 | ( expr )
+	 | NEW ID ( placeholder14 )
+	 | lhs
+	 | method_invocation
+placeholder14 -> arguments?
+arguments -> expr placeholder15
+placeholder15 -> (, expr)*
+lhs -> field_access
+field_access -> primary . ID
+              | ID
+method_invocation -> field_access ( placeholder14 )
+
+<=>
+
+literal : INT_CONST
+	| FLOAT_CONST
+	| STRING_CONST
+	| NULL
+	| TRUE
+	| FALSE
+primary : literal
+	| THIS
+	| SUPER
+	| ( expr )
+	| NEW ID ( placeholder14 )
+	| lhs
+	| method_invocation
+placeholder14 : arguments
+	      | empty
+arguments : expr placeholder15
+placeholder15 : , expr placeholder15
+	      | empty
+lhs : field_access
+field_access : primary . ID
+             | ID
+method_invocation : field_access ( placeholder14 )
+
+7.
+expr : primary
+     | assign
+     | new_array
+     | expr arith_op expr
+     | expr bool_op expr
+     | unary_op expr
+assign : lhs = expr
+       | lhs ++
+       | ++ lhs
+       | lhs --
+       | -- lhs
+new_array : NEW type ([ expr ])+ ([])*
+arith_op E {+, -, *, /}
+bool_op E {&&, ||, ==, !=, <, >, <=, >=}
+unary_op E {+, -, !}
+
+* As mentioned above, we are not including arrays anywhere in our grammar, so we must edit this to reflect that. We also need to convert the operators from set notation to BNF notation as well as enforce precedence rules within the grammar itself
+
+expr : primary
+     | assign
+     | expr arith_op expr
+     | expr bool_op expr
+     | unary_op expr
+assign : lhs = expr
+       | lhs PLUS_PLUS
+       | PLUS_PLUS lhs
+       | lhs MINUS_MINUS
+       | MINUS_MINUS lhs
+arith_op : +
+	 | -
+	 | *
+	 | /
+bool_op : BOOL_AND
+	| BOOL_OR
+	| BOOL_EQUALS
+	| BOOL_NOT_EQUALS
+	| <
+	| >
+	| BOOL_LESS_THAN_OR_EQUAL
+	| BOOL_GREATER_THAN_OR_EQUAL
+unary_op : +
+	 | -
+	 | !
+
+* Now we need to enforce the precedence of each token. The precedence is given in the manual. The symbols with the lowest precedence can be found closest to the top of the grammar rule.
+Assignment has the lowest precedence and so the first nonterminal revolves around separating assignment from any other expression.
+Boolean OR, ||, has the next precedence,
+Boolean AND, &&, comes next,
+Boolean EQUALS, ==, and NOT_EQUALS, !=, come next,
+<, >, <=, and >= have the next precedence,
++, - is next, (note that we include the unary operators here!)
+*, / come next,
+! finally has the highest precedence, although we should include parentheses after this one, I suppose
+Once all levels of precedence are accounted for, the whole grammar would be completed with ( expr ) since parentheses have the highest precedence but 'primary' actually represents the closest thing to a general operand in decaf and ( expr ) is a possible right-hand side of a production with 'primary' on the left-hand side, thus we complete the precedence grammar with 'primary' at the end.
+
+expr : assign
+     | p1
+assign : lhs = expr
+       | lhs PLUS_PLUS
+       | PLUS_PLUS lhs
+       | lhs MINUS_MINUS
+       | MINUS_MINUS lhs
+p1 : p1 BOOL_OR p2
+   | p2
+p2 : p2 BOOL_AND p3
+   | p3
+p3 : p3 EQUAL p4
+   | p3 NOT_EQUAL p4
+   | p4
+p4 : p4 < p5
+   | p4 > p5
+   | p4 LESS_THAN_OR_EQUAL p5
+   | p4 GREATER_THAN_OR_EQUAL p5
+   | p5
+p5 : p5 + p6
+   | p5 - p6
+   | p6
+p6 : p6 * p7
+   | p6 / p7
+   | p7
+p7 : ! p7
+   | + p7
+   | - p7
+   | primary
+
+After piecing together this BNF grammar rule I realized that I could've used the built-in functionality of PLY/yacc to implement precedence. Whoops.
+I also have set the precedence of the unary operators all to the highest level, since I believe that is where they ought to be anyway even if it hasn't been explicitly stated.
+
+8.
+stmt_expr : assign
+	  | method_invocation

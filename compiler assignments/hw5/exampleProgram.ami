@@ -1,0 +1,102 @@
+M_scan_int_1:
+
+
+M_scan_float_2:
+
+
+M_print_3:
+
+
+M_print_4:
+
+
+M_print_5:
+
+
+M_print_6:
+
+
+C_A_1:
+move_immediate_i t1, 0
+hload t0, a0, t1
+move_immediate_i t2, 0
+hstore a0, t1, t2
+
+M_f_7:
+move_immediate_i t1, 0
+hload t0, a0, t1
+move_immediate_i t2, 1
+iadd t3, t0, t2
+move a0, t3
+ret
+
+M_g_8:
+save a0
+save t0
+save t1
+save t2
+save t3
+call M_f_7
+move t4, a0
+restore t3
+restore t2
+restore t1
+restore t0
+restore a0
+move t0, t4
+move t5, t0
+move_immediate_i t6, 1
+iadd t0, t0, t6
+move_immediate_i t8, 1
+move t7, t8
+move a0, t0
+ret
+
+C_B_2:
+move_immediate_i t4, 1
+hload t3, a0, t4
+move_immediate_i t5, 2
+hstore a0, t4, t5
+move_immediate_i t7, 2
+hload t6, a0, t7
+move_immediate_i t9, 1
+halloc t8, t9
+save a0
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+move a0, t8
+call C_A_1
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+restore a0
+hstore a0, t7, t8
+
+M_f_9:
+move_immediate_i t1, 0
+hload t0, sap, t1
+move_immediate_i t3, 0
+hload t2, sap, t3
+move_immediate_i t4, 1
+iadd t5, t2, t4
+hstore sap, t1, t5
+move_immediate_i t6, 0
+move a0, t6
+ret
+
+.static_data 1

@@ -1,0 +1,145 @@
+M_scan_int_1:
+
+
+M_scan_float_2:
+
+
+M_print_3:
+
+
+M_print_4:
+
+
+M_print_5:
+
+
+M_print_6:
+
+
+M_main_7:
+save t0
+save t1
+save t2
+save t3
+call M_scan_int_1
+move t4, a0
+restore t3
+restore t2
+restore t1
+restore t0
+move t3, t4
+move_immediate_i t5, 1
+move t2, t5
+move_immediate_i t6, 0
+move t1, t6
+move_immediate_i t8, 1
+move t0, t8
+M_main_7_1:
+ilt t7, t0, t3
+bz t7, M_main_7_2
+iadd t9, t1, t2
+move t2, t9
+isub t10, t2, t1
+move t1, t10
+move_immediate_i t11, 1
+iadd t12, t0, t11
+move t0, t12
+jmp M_main_7_1
+M_main_7_2:
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+save t10
+save t11
+save t12
+IGNORE
+move a0, NO RESULT REGISTER
+call M_print_6
+move t13, a0
+restore t12
+restore t11
+restore t10
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+save t10
+save t11
+save t12
+save t13
+move a0, t2
+call M_print_3
+move t14, a0
+restore t13
+restore t12
+restore t11
+restore t10
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+save t0
+save t1
+save t2
+save t3
+save t4
+save t5
+save t6
+save t7
+save t8
+save t9
+save t10
+save t11
+save t12
+save t13
+save t14
+IGNORE
+move a0, NO RESULT REGISTER
+call M_print_6
+move t15, a0
+restore t14
+restore t13
+restore t12
+restore t11
+restore t10
+restore t9
+restore t8
+restore t7
+restore t6
+restore t5
+restore t4
+restore t3
+restore t2
+restore t1
+restore t0
+
+.static_data 0

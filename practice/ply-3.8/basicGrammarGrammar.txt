@@ -1,0 +1,101 @@
+Goal : Rule+
+Rule : A ":" B (| B)*
+A : NONTERMINAL
+B : (NONTERMINAL | TERMINAL)+
+
+<=>
+
+Goal : Rule X
+X : Rule X
+  | empty
+Rule :  A ":" B (| B)*
+A : NONTERMINAL
+B : (NONTERMINAL | TERMINAL)+
+
+<=>
+
+Goal : Rule X
+X : Rule X
+  | empty
+Rule :  A ":" B Y
+Y : "|" B Y
+  | empty
+A : NONTERMINAL
+B : (NONTERMINAL | TERMINAL)+
+
+<=>
+
+Goal : Rule X
+X : Rule X
+  | empty
+Rule :  A ":" B Y
+Y : "|" B Y
+  | empty
+A : NONTERMINAL
+B : NONTERMINAL B
+  | TERMINAL B
+  | NONTERMINAL
+  | TERMINAL
+
+<=>
+
+changed the grammar entirely to fix the ambiguities.....
+1, Goal : Rule X
+2, X : Rule X
+3,   | empty
+4, Rule : LeftHand ":" RightHand 
+5, RightHand : NONTERMINAL RightHand 
+6,   | TERMINAL RightHand 
+7,   | NONTERMINAL
+8,   | TERMINAL
+9, LeftHand : NONTERMINAL
+
+A        : Goal | Rule | X | LeftHand | RightHand
+First(A) : NONTERMINAL | NONTERMINAL | NONTERMINAL, E |NONTERMINAL | NONTERMINAL, TERMINAL
+Follow(A) : EOF | NONTERMINAL, E | EOF, NONTERMINAL | : | TERMINAL, NONTERMINAL, EOF
+
+
+Production First+(p)
+1          NONTERMINAL
+2          NONTERMINAL
+3          EOF, NONTERMINAL
+4          NONTERMINAL
+5          NONTERMINAL
+6          TERMINAL
+7          NONTERMINAL
+8          TERMINAL
+9          NONTERMINAL
+
+First+(RightHand : NONTERMINAL RightHand) intersected with First+(RightHand : NONTERMINAL) = {NONTERMINAL} which is non-empty!!
+
+and
+
+First+(RightHand : TERMINAL RightHand) intersected with First+(RightHand : TERMINAL) = {NONTERMINAL} which is non-empty!!
+
+Messing around....
+
+1, Goal : Rule X
+2, X : Rule X
+3,   | empty
+4, Rule : LeftHand ":" RightHand 
+5, RightHand : NONTERMINAL RightHand 
+6,   | TERMINAL RightHand 
+7,   | empty
+9, LeftHand : NONTERMINAL
+
+Is this ambiguous? Is this backtrack free? Is this LR(1) and LL(1) parsable????
+ProductionList : Production ProductionList
+               | empty
+Production : NONTERMINAL ":" RightHand 
+RightHand : NONTERMINAL RightHand 
+          | TERMINAL RightHand 
+          | empty
+
+New grammar based off a different parse...
+ProductionList : Production ProductionList
+               | empty
+Production : LHS RightHand 
+RightHand : NONTERMINAL RightHand 
+          | TERMINAL RightHand 
+          | empty 
+
